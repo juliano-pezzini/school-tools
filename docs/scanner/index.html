@@ -55,6 +55,10 @@
 
     <video id="video" playsinline muted></video>
     <div class="status" id="status">Iniciando camera…</div>
+    <button id="lanterna" class="sec" hidden>Lanterna</button>
+    <p id="dica" style="font-size: 0.85rem; color: #666; margin: 8px 0 0;">
+      Segure firme a ~15–20 cm do codigo, com boa luz. Deixe o codigo preencher a largura da tela.
+    </p>
 
     <div id="resultado" hidden>
       <div class="code" id="code"></div>
@@ -82,6 +86,15 @@
       var reader = new ZXing.BrowserMultiFormatReader(hints);
       var parado = false;
 
+      // Resolucao alta ajuda o ZXing a ler codigos pequenos/distantes.
+      var constraints = {
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+      };
+
       function setStatus(msg, cls) {
         var s = document.getElementById('status');
         s.textContent = msg;
@@ -92,11 +105,14 @@
         parado = false;
         document.getElementById('resultado').hidden = true;
         setStatus('Aponte a camera para o codigo de barras ou QR…');
+        var video = document.getElementById('video');
+        video.addEventListener('playing', ajustarCamera, { once: true });
         reader
-          .decodeFromConstraints({ video: { facingMode: 'environment' } }, 'video', function (result, err) {
+          .decodeFromConstraints(constraints, 'video', function (result, err) {
             if (result && !parado) {
               parado = true;
               reader.reset();
+              esconderLanterna();
               mostrar(result.getText(), result.getBarcodeFormat());
             }
             // err em cada quadro sem leitura e' normal (NotFoundException) — ignorar.
@@ -104,6 +120,42 @@
           .catch(function (e) {
             setStatus('Erro ao abrir a camera: ' + (e && e.message ? e.message : e), 'err');
           });
+      }
+
+      // A camera nativa autofoca, mas o stream do getUserMedia costuma comecar sem foco
+      // continuo. Forcamos foco continuo e habilitamos a lanterna quando suportado.
+      function ajustarCamera() {
+        try {
+          var stream = document.getElementById('video').srcObject;
+          if (!stream) return;
+          var track = stream.getVideoTracks()[0];
+          var caps = track.getCapabilities ? track.getCapabilities() : {};
+          if (caps.focusMode && caps.focusMode.indexOf('continuous') >= 0) {
+            track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(function () {});
+          }
+          if (caps.torch) prepararLanterna(track);
+        } catch (e) {
+          /* nem todo aparelho suporta getCapabilities/applyConstraints */
+        }
+      }
+
+      var torchTrack = null, torchOn = false;
+      function prepararLanterna(track) {
+        torchTrack = track;
+        var btn = document.getElementById('lanterna');
+        btn.hidden = false;
+        btn.textContent = 'Lanterna';
+        btn.onclick = function () {
+          torchOn = !torchOn;
+          torchTrack.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(function () {});
+          btn.textContent = torchOn ? 'Apagar lanterna' : 'Lanterna';
+        };
+      }
+      function esconderLanterna() {
+        var btn = document.getElementById('lanterna');
+        btn.hidden = true;
+        torchOn = false;
+        torchTrack = null;
       }
 
       function mostrar(code, formato) {
