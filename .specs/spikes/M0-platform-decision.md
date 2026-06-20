@@ -117,10 +117,20 @@ Itens descobertos na revisão completa da spec. Prioridade: 🔴 pode invalidar 
 - 🟡 **Fallback manual** sempre disponível.
 
 ### G. Robô da Biblioteca (detalha B-002)
-- 🔴 O sistema de catálogo é **intranet-only** (rede gov)? Se sim, Playwright só roda em **PC local** (GitHub Actions não alcança).
-- 🟠 Login com **captcha/2FA**? Estabilidade de seletores; rate limiting / anti-bot.
-- 🟡 Cobertura de **metadados de ISBN brasileiros** (Google Books/Open Library) + fallback manual.
-- 🟡 **Orquestração** celular→fila→Playwright (trigger, deduplicação, feedback de erro ao usuário).
+- 🟡 **Pergamum central identificado** (`pergamum.blumenau.sc.gov.br`, SPA, internet pública), mas o filtro de unidades **não lista escolas** → a biblioteca da **escola usa outro sistema** (a confirmar). Central serve só de referência.
+- 🔴 **Identificar o sistema da escola** (nome/URL ou ícone do programa) direto com a bibliotecária + print da tela de cadastro.
+- 🔴 **Fluxo de catalogacão:** é no **navegador** (Playwright serve) ou **cliente desktop** (Playwright NÃO serve, exigiria automacão de desktop)?
+- 🟢 **Importacão por ISBN (Z39.50 / cópia de catalogacão):** se o sistema importa o registro pelo ISBN, o robô dispensa buscar metadados no Google Books/Open Library.
+- 🟠 Login com **captcha/2FA** no módulo de catalogacão? Estabilidade de seletores; rate limiting / anti-bot.
+- 🟡 **Orquestracão** celular→fila→Playwright (trigger, deduplicacão, feedback de erro ao usuário).
+
+#### G.1 Fonte dos metadados (a partir do ISBN)
+- 🟢 **Preferencial — importacão nativa do próprio sistema** (Z39.50/cópia de catalogacão): já vem em MARC e com a **classificacão** que o sistema espera; é a fonte mais limpa. Só existe se o sistema da escola tiver essa funcão (a confirmar).
+- 🔴 **Cobertura de livros BR é o maior risco:** acervo escolar = didáticos/paradidáticos/infantis nacionais, mal cobertos em **Google Books** e **Open Library**. Medir taxa de acerto com ISBNs reais do acervo antes de decidir.
+- 🟠 **Fontes brasileiras a avaliar:** CBL / Câmara Brasileira do Livro (Mercado Editorial API), **Biblioteca Nacional** (catálogo/Z39.50), agência **ISBN Brasil**. Verificar acesso, custo e termos de uso.
+- 🟠 **Classificacão (CDD vs CDU) e campos mínimos:** título, subtítulo, autor(es), editora, ano, edicão, idioma, assunto + a classificacão que o sistema exige. Metadados externos raramente trazem CDD/CDU → pode exigir preenchimento/regra manual.
+- 🟡 **Qualidade/desempate:** ISBN-10 vs ISBN-13, edicões diferentes com mesmo título, registros divergentes entre fontes → estratégia de prioridade de fontes + revisão humana.
+- 🟡 **Fallback manual** sempre disponível quando o ISBN não é encontrado em nenhuma fonte.
 
 ### H. Escopo / Acesso externo (B-006)
 - 🟠 O **Fluxo de Caixa é da APP** (associação de pais e mestres). Membros/pais podem **não** ter conta `@ensinablumenau`. Precisam de acesso (transparência/leitura pública)? Conflita com a premissa SSO-only (AD-004).

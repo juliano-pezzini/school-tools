@@ -74,12 +74,15 @@
 **Workaround:** Seguir com a stack provisória (Pure Google + Playwright) nos spikes de validação.
 **Resolution:** Concluir os spikes de capacidade do M0 (NFe/NFC-e, QR/barcode, relatórios, gráficos, papéis+SSO). Confirmação → consolidar AD-007; falha → escalar a ferramenta afetada para B/C.
 
-### B-002: Sistema web de catálogo da biblioteca não identificado
+### B-002: Sistema web de catálogo da biblioteca — identificado (Pergamum); fluxo de catalogacão a confirmar
 
 **Discovered:** 2026-06-20
-**Impact:** Bloqueia o M3 (Robô da Biblioteca) — sem conhecer o sistema, não há como validar o Playwright.
+**Impact:** Bloqueia o M3 (Robô da Biblioteca) — sem conhecer o sistema e o fluxo de cadastro, não há como validar o Playwright.
 **Workaround:** Nenhum.
 **Resolution:** Identificar o sistema com a equipe da biblioteca durante o Spike Robô da Biblioteca.
+**Finding (2026-06-20, pesquisa web):** A rede de Blumenau usa **Pergamum** (consórcio PUCPR), instância `https://pergamum.blumenau.sc.gov.br/` (Biblioteca Municipal Dr. Fritz Müller), versão **web nova (SPA)**. **Conectividade: internet pública** — um runner Playwright em nuvem (GitHub Actions) alcança (não é intranet). O login público visto é o do **catálogo do leitor** (“Código de usuário + senha de empréstimo”), **sem captcha aparente** — mas é o lado patrono, não a catalogacão.
+**Finding (2026-06-20, check do filtro de unidades):** No filtro “Biblioteca/Unidade” da Pesquisa Avançada **NÃO aparecem escolas** — só a Biblioteca Municipal (+ Arquivo Histórico). Conclusão: a biblioteca da **escola NÃO está nesta base** do Pergamum central. O sistema da escola é **outro** (outra base Pergamum, outro software, ou inexistente) e só será identificado direto com a bibliotecária/print. A instância central só serve de referência (existe API pública de leitura `cod_empresa=212`).
+**Ainda a confirmar com a bibliotecária (tenant-only):** (1) **qual sistema** a biblioteca da escola usa para cadastrar livros (nome/URL ou ícone do programa)? (2) é pelo **navegador** (Playwright serve) ou **programa desktop** (não serve)? (3) o cadastro permite **importar por ISBN (Z39.50/cópia de catalogacão)** — se sim, o robô dispensa o scraping de metadados (Google Books).
 
 ### B-003: Viabilidade da integração NFe/NFC-e incerta
 
