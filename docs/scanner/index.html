@@ -104,8 +104,21 @@
         await video.play();
         track = stream.getVideoTracks()[0];
         ajustarCamera();
-        // Capabilities as vezes so aparecem um instante depois de iniciar.
-        setTimeout(ajustarCamera, 800);
+        // A capability `torch` em alguns Samsung so e' reportada um tempo depois
+        // de iniciar — tentamos algumas vezes antes de desistir.
+        var tentativas = 0;
+        var t = setInterval(function () {
+          tentativas++;
+          ajustarCamera();
+          if (!document.getElementById('lanterna').hidden) {
+            clearInterval(t);
+          } else if (tentativas >= 6) {
+            clearInterval(t);
+            // Capability nunca reportada: mostra o botao mesmo assim — no S24+ o
+            // acionamento direto via applyConstraints costuma funcionar.
+            prepararLanterna();
+          }
+        }, 600);
       }
 
       function ajustarCamera() {
@@ -126,8 +139,14 @@
         btn.onclick = function () {
           if (!track) return;
           torchOn = !torchOn;
-          track.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(function () {});
-          btn.textContent = torchOn ? 'Apagar lanterna' : 'Lanterna';
+          track.applyConstraints({ advanced: [{ torch: torchOn }] })
+            .then(function () {
+              btn.textContent = torchOn ? 'Apagar lanterna' : 'Lanterna';
+            })
+            .catch(function () {
+              torchOn = false;
+              btn.textContent = 'Lanterna (nao suportada neste navegador)';
+            });
         };
       }
       function esconderLanterna() {
