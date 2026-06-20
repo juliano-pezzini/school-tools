@@ -13,13 +13,14 @@
 
 ## Tech Stack
 
-**Status:** _Indefinido — a ser decidido via spikes no Milestone 0 (ver ROADMAP)._
+**Status:** _Provisório (AD-007) — Pure Google (Apps Script + Sheets/Drive) + Playwright; a confirmar nos spikes de capacidade do M0 (ver ROADMAP e `.specs/spikes/M0-platform-decision.md`)._
 
 **Candidatos em avaliação:**
 
-- Google Workspace nativo (Sheets + Forms + Apps Script) — custo zero, SSO embutido, "é só uma planilha" se o dev sumir.
-- Supabase (cota gratuita) + frontend web estático gratuito (ex.: GitHub Pages) — mais flexível, porém mais superfície de manutenção.
+- **[Provisório] Google Workspace nativo (Sheets + Forms + Apps Script)** — custo zero, SSO embutido, "é só uma planilha" se o dev sumir.
+- Supabase (cota gratuita) + frontend web estático gratuito (ex.: GitHub Pages) — rota de escalonamento se Apps Script não comportar relatórios/UX.
 - Playwright (RPA) para automação do sistema web de biblioteca que não possui API.
+- **Google Drive como camada de armazenamento de arquivos** (comprovantes/anexos), independente do backend escolhido — já licenciado, mesmo SSO/permissões do domínio.
 
 **Convenção de idioma:** UI e documentação para o usuário em **pt-BR**; código e identificadores em **inglês**.
 

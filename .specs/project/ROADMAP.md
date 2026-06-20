@@ -12,10 +12,29 @@
 
 ### Spikes
 
-**Decisão de Plataforma** - PLANNED
+**Decisão de Plataforma** - COMPLETE (provisória)
 
-- Comparar Google Workspace nativo (Sheets/Forms/Apps Script) x Supabase (cota gratuita) + frontend estático.
-- Critérios: custo recorrente, esforço de manutenção, autonomia do usuário, SSO Google, limites das cotas gratuitas.
+- Matriz de decisão em `.specs/spikes/M0-platform-decision.md` → stack provisória **Pure Google (Apps Script + Sheets/Drive) + Playwright** (AD-007).
+- Sujeita à comprovação pelos spikes de capacidade abaixo.
+
+**Spike de Capacidades da Stack** - PLANNED
+
+- Comprovar que a stack provisória comporta cada desafio técnico (do contrário, escalar a ferramenta para Supabase/Cloudflare):
+  - Integração NFe/NFC-e (parsing/consulta).
+  - Leitura de QR/código de barras (incl. ISBN) pela câmera.
+  - Geração de relatórios (mensal/anual).
+  - Gráficos e insights.
+  - Controle de autorização por papéis (admin/tesoureiro/leitor) integrado ao SSO Google.
+  - (Catálogo detalhado de riscos em `.specs/spikes/M0-platform-decision.md` → "Desafios técnicos adicionais a comprovar".)
+
+**Spike de Governança do Workspace (admin)** - PLANNED
+
+- 🔴 Pode invalidar a stack A. Confirmar com o admin do Workspace municipal: deploy de web app Apps Script para o domínio, Apps Script API habilitada (para `clasp`/CI), escopos OAuth, Shared Drives e compartilhamento externo, cotas multiusuário.
+
+**Spike de UI Mobile / Scanner no HtmlService** - PLANNED
+
+- 🔴 Validar acesso à câmera (`getUserMedia`) dentro do iframe sandbox do HtmlService e carga de libs externas (ZXing/Chart.js) sob a CSP. Plano B: página de scanner hospedada à parte (GitHub Pages).
+- Inclui: upload de foto de comprovante do celular, integridade de dados (LockService/concorrência, auditoria append-only, backup), isolamento server-side de privacidade (banco de horas) e localização pt-BR.
 
 **Spike NFe/NFC-e** - PLANNED
 
