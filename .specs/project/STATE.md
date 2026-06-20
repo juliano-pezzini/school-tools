@@ -101,7 +101,8 @@
 **Impact:** 🔴 Afeta todas as leituras (ISBN, QR/NFC-e, barcode). Se `getUserMedia` não funcionar no sandbox do HtmlService, o scanner não roda dentro do Apps Script.
 **Workaround:** Página de scanner hospedada à parte (GitHub Pages) que envia o código lido ao Apps Script.
 **Resolution:** Testado junto com B-004 no `spikes/m0-hello-world/` (botão “Testar câmera” via `getUserMedia` dentro do iframe do HtmlService).
-**Finding (2026-06-20, conta pessoal):** `getUserMedia` ao vivo **BLOQUEADO** no iframe do HtmlService — `NotAllowedError: Permission denied`, sem prompt (a Permissions Policy do iframe não inclui `allow="camera"`; não é negação do usuário). `<input type="file" capture="environment">` (câmera nativa) funciona, e **ZXing carrega OK sob a CSP**, mas **decodificar de foto estática falhou** mesmo com `TRY_HARDER`+hints (`NotFoundException`). **RESOLVIDO via AD-008:** scan ao vivo numa página hospedada à parte (`docs/scanner/`), devolvendo o código ao Apps Script. Spike pendente de publicar no Pages e validar no celular.
+**Finding (2026-06-20, conta pessoal):** `getUserMedia` ao vivo **BLOQUEADO** no iframe do HtmlService — `NotAllowedError: Permission denied`, sem prompt (a Permissions Policy do iframe não inclui `allow="camera"`; não é negação do usuário). `<input type="file" capture="environment">` (câmera nativa) funciona, e **ZXing carrega OK sob a CSP**, mas **decodificar de foto estática falhou** mesmo com `TRY_HARDER`+hints (`NotFoundException`). **RESOLVIDO via AD-008:** scan ao vivo numa página hospedada à parte (`docs/scanner/`), devolvendo o código ao Apps Script.
+**Validação (2026-06-20, Samsung S24+, Chrome e Edge):** scanner ao vivo em GitHub Pages **FUNCIONA** — imagem nítida (foco contínuo), ISBN lido corretamente em dois livros, sem falsos positivos. Chaves do sucesso: (1) abrir a câmera com `getUserMedia` próprio em vez de deixar a lib abrir (controle real de foco/lanterna); (2) usar `BarcodeDetector` nativo do Android quando disponível (ZXing só como fallback) — muito mais robusto a desfoque; (3) confirmação dupla (2 leituras idênticas) para eliminar misreads. Lanterna: capability `torch` não reportada de imediato no S24+; mitigado com retries + fallback de acionamento direto. **B-005 VALIDADO.**
 
 ### B-006: Acesso externo da associação (APP) vs. premissa SSO-only
 
@@ -116,6 +117,7 @@
 
 - **HtmlService bloqueia `getUserMedia`:** o iframe do Apps Script não delega `allow="camera"`, então scanner de vídeo ao vivo falha com `NotAllowedError` (sem prompt). Solução: `<input type="file" accept="image/*" capture="environment">` abre a câmera nativa e funciona; decodificar o código da foto client-side (ex.: ZXing). Confirmado empiricamente em 2026-06-20.
 - **Conta pessoal de-risca parte do M0:** motor do Apps Script/HtmlService é idêntico ao Workspace — reproduz fielmente câmera/CSP/capacidades. **Não** reproduz: governança do admin (B-004), SSO por domínio e Shared Drives (são tenant-only).
+- **Scanner ao vivo confiável (validado S24+):** abrir o stream manualmente (não via lib), preferir `BarcodeDetector` nativo ao ZXing, e exigir 2 leituras idênticas antes de aceitar. `decodeFromConstraints` do ZXing tira o controle do track (lanterna/foco não pegam) e gera falsos positivos em código borrado. Capability `torch` no Samsung pode demorar a aparecer — usar retries + fallback.
 
 ---
 
