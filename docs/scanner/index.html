@@ -53,11 +53,11 @@
   <body>
     <h1>Scanner — Ensina Blumenau</h1>
 
-    <video id="video" playsinline muted></video>
+    <video id="video" playsinline muted autoplay></video>
     <div class="status" id="status">Iniciando camera…</div>
     <button id="lanterna" class="sec" hidden>Lanterna</button>
     <p id="dica" style="font-size: 0.85rem; color: #666; margin: 8px 0 0;">
-      Segure firme a ~15–20 cm do codigo, com boa luz. Deixe o codigo preencher a largura da tela.
+      Segure firme a ~15–25 cm do codigo, com boa luz. Deixe o codigo preencher a largura da tela e espere a imagem ficar nitida.
     </p>
 
     <div id="resultado" hidden>
@@ -67,33 +67,22 @@
       <button id="denovo" class="sec">Escanear outro</button>
     </div>
 
-    <!-- ZXing: leitura ao vivo de codigo de barras / QR (pagina top-level, fora do iframe do Apps Script). -->
+    <!-- ZXing entra so como fallback quando o BarcodeDetector nativo nao existe. -->
     <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
     <script>
       // ?return=<URL do /exec do Apps Script> — para onde devolver o codigo lido.
       var params = new URLSearchParams(location.search);
       var returnUrl = params.get('return');
 
-      var hints = new Map();
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-        ZXing.BarcodeFormat.EAN_13,
-        ZXing.BarcodeFormat.EAN_8,
-        ZXing.BarcodeFormat.CODE_128,
-        ZXing.BarcodeFormat.ITF,
-        ZXing.BarcodeFormat.QR_CODE,
-      ]);
-      var reader = new ZXing.BrowserMultiFormatReader(hints);
+      var FORMATOS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'itf', 'qr_code'];
+      var video = document.getElementById('video');
       var parado = false;
+      var stream = null;
+      var track = null;
 
-      // Resolucao alta ajuda o ZXing a ler codigos pequenos/distantes.
-      var constraints = {
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-      };
+      // Confirmacao anti-erro: so aceita um codigo apos 2 leituras IGUAIS seguidas.
+      // Codigo de barras borrado gera falso positivo (valores diferentes) — isso filtra.
+      var ultimo = null, repeticoes = 0;
 
       function setStatus(msg, cls) {
         var s = document.getElementById('status');
@@ -101,53 +90,43 @@
         s.className = 'status' + (cls ? ' ' + cls : '');
       }
 
-      function iniciar() {
-        parado = false;
-        document.getElementById('resultado').hidden = true;
-        setStatus('Aponte a camera para o codigo de barras ou QR…');
-        var video = document.getElementById('video');
-        video.addEventListener('playing', ajustarCamera, { once: true });
-        reader
-          .decodeFromConstraints(constraints, 'video', function (result, err) {
-            if (result && !parado) {
-              parado = true;
-              reader.reset();
-              esconderLanterna();
-              mostrar(result.getText(), result.getBarcodeFormat());
-            }
-            // err em cada quadro sem leitura e' normal (NotFoundException) — ignorar.
-          })
-          .catch(function (e) {
-            setStatus('Erro ao abrir a camera: ' + (e && e.message ? e.message : e), 'err');
-          });
+      // Abre a camera EU MESMO (em vez de deixar a lib abrir) — assim controlo foco
+      // continuo e lanterna de forma confiavel no track real.
+      async function abrirCamera() {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+        });
+        video.srcObject = stream;
+        await video.play();
+        track = stream.getVideoTracks()[0];
+        ajustarCamera();
+        // Capabilities as vezes so aparecem um instante depois de iniciar.
+        setTimeout(ajustarCamera, 800);
       }
 
-      // A camera nativa autofoca, mas o stream do getUserMedia costuma comecar sem foco
-      // continuo. Forcamos foco continuo e habilitamos a lanterna quando suportado.
       function ajustarCamera() {
-        try {
-          var stream = document.getElementById('video').srcObject;
-          if (!stream) return;
-          var track = stream.getVideoTracks()[0];
-          var caps = track.getCapabilities ? track.getCapabilities() : {};
-          if (caps.focusMode && caps.focusMode.indexOf('continuous') >= 0) {
-            track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(function () {});
-          }
-          if (caps.torch) prepararLanterna(track);
-        } catch (e) {
-          /* nem todo aparelho suporta getCapabilities/applyConstraints */
+        if (!track || !track.getCapabilities) return;
+        var caps = track.getCapabilities();
+        if (caps.focusMode && caps.focusMode.indexOf('continuous') >= 0) {
+          track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(function () {});
         }
+        if (caps.torch) prepararLanterna();
       }
 
-      var torchTrack = null, torchOn = false;
-      function prepararLanterna(track) {
-        torchTrack = track;
+      var torchOn = false;
+      function prepararLanterna() {
         var btn = document.getElementById('lanterna');
+        if (!btn.hidden) return;
         btn.hidden = false;
         btn.textContent = 'Lanterna';
         btn.onclick = function () {
+          if (!track) return;
           torchOn = !torchOn;
-          torchTrack.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(function () {});
+          track.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(function () {});
           btn.textContent = torchOn ? 'Apagar lanterna' : 'Lanterna';
         };
       }
@@ -155,7 +134,82 @@
         var btn = document.getElementById('lanterna');
         btn.hidden = true;
         torchOn = false;
-        torchTrack = null;
+      }
+
+      // Recebe um candidato; so confirma apos 2 leituras identicas seguidas.
+      function candidato(code, formato) {
+        if (parado) return;
+        if (code === ultimo) {
+          repeticoes++;
+        } else {
+          ultimo = code;
+          repeticoes = 1;
+        }
+        if (repeticoes >= 2) aceitar(code, formato);
+      }
+
+      function aceitar(code, formato) {
+        parado = true;
+        pararCamera();
+        mostrar(code, formato);
+      }
+
+      function pararCamera() {
+        try { if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+        stream = null;
+        track = null;
+        esconderLanterna();
+      }
+
+      // --- Motor 1 (preferido): BarcodeDetector nativo do Android/Chrome ---
+      async function loopNativo(detector) {
+        if (parado) return;
+        try {
+          var codes = await detector.detect(video);
+          if (codes && codes.length) candidato(codes[0].rawValue, codes[0].format);
+        } catch (e) { /* quadro sem leitura — normal */ }
+        if (!parado) requestAnimationFrame(function () { loopNativo(detector); });
+      }
+
+      // --- Motor 2 (fallback): ZXing sobre o stream que EU abri ---
+      function iniciarZXing() {
+        var hints = new Map();
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+          ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+          ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E,
+          ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.ITF,
+          ZXing.BarcodeFormat.QR_CODE,
+        ]);
+        var reader = new ZXing.BrowserMultiFormatReader(hints);
+        reader.decodeFromStream(stream, video, function (result) {
+          if (result && !parado) candidato(result.getText(), result.getBarcodeFormat());
+        }).catch(function (e) {
+          setStatus('Erro no leitor: ' + (e && e.message ? e.message : e), 'err');
+        });
+      }
+
+      async function iniciar() {
+        parado = false;
+        ultimo = null;
+        repeticoes = 0;
+        document.getElementById('resultado').hidden = true;
+        setStatus('Aponte a camera para o codigo de barras ou QR…');
+        try {
+          await abrirCamera();
+        } catch (e) {
+          setStatus('Erro ao abrir a camera: ' + (e && e.message ? e.message : e), 'err');
+          return;
+        }
+        if ('BarcodeDetector' in window) {
+          var suportados = [];
+          try { suportados = await window.BarcodeDetector.getSupportedFormats(); } catch (e) {}
+          var fmts = FORMATOS.filter(function (f) { return suportados.indexOf(f) >= 0; });
+          var detector = new window.BarcodeDetector(fmts.length ? { formats: fmts } : undefined);
+          loopNativo(detector);
+        } else {
+          iniciarZXing();
+        }
       }
 
       function mostrar(code, formato) {
