@@ -80,6 +80,8 @@ Não há um vencedor único — a melhor jogada é casar cada ferramenta ao seu 
 Itens descobertos na revisão completa da spec. Prioridade: 🔴 pode invalidar a stack A · 🟠 alto · 🟡 médio.
 
 ### A. Plataforma / Governança do Workspace (B-004)
+
+> **Método de teste (empírico):** artefato em `spikes/m0-hello-world/` — a diretora implanta um Web App mínimo na conta `@ensinablumenau`. Um único teste prova deploy + SSO/identidade + câmera (B-005). Avisos/bloqueios do admin durante a autorização SÃO o resultado.
 - 🔴 O **admin do Workspace municipal** permite **deploy de web app** Apps Script para o domínio e execução de scripts? Escopos OAuth necessários liberados? (política de org pode bloquear tudo).
 - 🔴 **Apps Script API habilitada** no tenant para permitir `clasp` (construção por agente / CI).
 - 🟠 **Shared Drives** habilitados? Compartilhamento externo permitido ou bloqueado por política?

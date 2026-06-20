@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <base target="_top" />
+    <meta charset="utf-8" />
+    <style>
+      :root { color-scheme: light; }
+      body {
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        padding: 16px;
+        background: #f4f6f8;
+        color: #1a1a1a;
+      }
+      h1 { font-size: 1.25rem; margin: 0 0 12px; }
+      .card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 14px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+      }
+      .label { font-size: 0.8rem; color: #666; text-transform: uppercase; letter-spacing: 0.04em; }
+      .value { font-size: 1.05rem; font-weight: 600; word-break: break-all; }
+      button {
+        width: 100%;
+        padding: 14px;
+        font-size: 1rem;
+        font-weight: 600;
+        border: 0;
+        border-radius: 10px;
+        background: #1565c0;
+        color: #fff;
+        cursor: pointer;
+      }
+      button:active { background: #0d47a1; }
+      video { width: 100%; border-radius: 10px; margin-top: 12px; background: #000; }
+      .status { padding: 12px; border-radius: 8px; margin-top: 12px; font-weight: 600; }
+      .ok { background: #e6f4ea; color: #137333; }
+      .err { background: #fce8e6; color: #c5221f; }
+      .muted { color: #666; font-weight: 400; }
+      code { background: #eee; padding: 1px 5px; border-radius: 4px; font-size: 0.85rem; }
+      ul { margin: 8px 0 0; padding-left: 18px; font-size: 0.9rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Spike Hello World — Ensina Blumenau</h1>
+
+    <div class="card">
+      <div class="label">1. Identidade (SSO)</div>
+      <div class="value" id="email">carregando…</div>
+      <div class="muted" style="font-size: 0.85rem; margin-top: 6px;">
+        Deve mostrar o e-mail de QUEM abriu esta pagina.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">2. Diagnostico do ambiente</div>
+      <ul id="diag">
+        <li>verificando…</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="label">3. Teste da camera (scanner)</div>
+      <button id="camBtn" onclick="testarCamera()">Testar camera</button>
+      <video id="video" autoplay playsinline muted style="display: none;"></video>
+      <div class="status muted" id="camStatus">Aperte o botao e permita o acesso a camera.</div>
+    </div>
+
+    <script>
+      // 1. SSO / identidade — chama o servidor Apps Script.
+      google.script.run
+        .withSuccessHandler(function (email) {
+          document.getElementById('email').textContent = email;
+        })
+        .withFailureHandler(function (err) {
+          var el = document.getElementById('email');
+          el.textContent = 'ERRO ao obter e-mail: ' + err.message;
+          el.parentElement.classList.add('err');
+        })
+        .getUsuarioAtual();
+
+      // 2. Diagnostico do ambiente (roda no navegador, dentro do iframe).
+      (function () {
+        var diag = document.getElementById('diag');
+        var temMediaDevices = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+        var linhas = [
+          'Contexto seguro (HTTPS): ' + (window.isSecureContext ? 'SIM' : 'NAO'),
+          'navigator.mediaDevices disponivel: ' + (temMediaDevices ? 'SIM' : 'NAO (sandbox pode estar bloqueando)'),
+          'Dentro de iframe: ' + (window.self !== window.top ? 'SIM' : 'NAO'),
+          'Dispositivo: ' + (/Mobi|Android|iPhone/i.test(navigator.userAgent) ? 'celular' : 'desktop'),
+        ];
+        diag.innerHTML = linhas.map(function (l) { return '<li>' + l + '</li>'; }).join('');
+      })();
+
+      // 3. Teste de camera (B-005) — getUserMedia dentro do iframe do HtmlService.
+      async function testarCamera() {
+        var status = document.getElementById('camStatus');
+        var video = document.getElementById('video');
+        status.textContent = 'Solicitando acesso a camera…';
+        status.className = 'status muted';
+        try {
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error('navigator.mediaDevices indisponivel (bloqueado pelo sandbox do iframe)');
+          }
+          var stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment' },
+          });
+          video.srcObject = stream;
+          video.style.display = 'block';
+          status.textContent = 'SUCESSO! A camera abriu dentro do HtmlService.';
+          status.className = 'status ok';
+        } catch (e) {
+          status.textContent = 'FALHOU: ' + e.name + ' — ' + e.message;
+          status.className = 'status err';
+        }
+      }
+    </script>
+  </body>
+</html>

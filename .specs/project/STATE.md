@@ -86,14 +86,14 @@
 **Discovered:** 2026-06-20
 **Impact:** 🔴 Pode invalidar a stack A (AD-007). O admin pode bloquear deploy de web app Apps Script, a Apps Script API (clasp/CI), escopos OAuth, Shared Drives ou compartilhamento externo.
 **Workaround:** Nenhum; se bloqueado, escalar para stack B/C (web app + Supabase/Cloudflare).
-**Resolution:** Spike de Governança do Workspace com o admin de TI municipal antes de investir na stack A.
+**Resolution:** Teste empírico “Hello World” em `spikes/m0-hello-world/` — a diretora implanta um Web App mínimo na conta da escola. Prova deploy + SSO + câmera (B-005) de uma vez. Capturar avisos/bloqueios do admin como resultado.
 
 ### B-005: Acesso à câmera dentro do iframe sandbox do HtmlService incerto
 
 **Discovered:** 2026-06-20
 **Impact:** 🔴 Afeta todas as leituras (ISBN, QR/NFC-e, barcode). Se `getUserMedia` não funcionar no sandbox do HtmlService, o scanner não roda dentro do Apps Script.
 **Workaround:** Página de scanner hospedada à parte (GitHub Pages) que envia o código lido ao Apps Script.
-**Resolution:** Spike de UI Mobile/Scanner no HtmlService no M0.
+**Resolution:** Testado junto com B-004 no `spikes/m0-hello-world/` (botão “Testar câmera” via `getUserMedia` dentro do iframe do HtmlService).
 
 ### B-006: Acesso externo da associação (APP) vs. premissa SSO-only
 
