@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Scanner — Ensina Blumenau</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        padding: 16px;
+        background: #f4f6f8;
+        color: #1a1a1a;
+      }
+      h1 { font-size: 1.2rem; margin: 0 0 12px; }
+      #video {
+        width: 100%;
+        max-height: 60vh;
+        border-radius: 12px;
+        background: #000;
+        object-fit: cover;
+      }
+      .status { padding: 12px; border-radius: 8px; margin-top: 12px; font-weight: 600; background: #fff; }
+      .ok { background: #e6f4ea; color: #137333; }
+      .err { background: #fce8e6; color: #c5221f; }
+      #resultado { margin-top: 14px; }
+      .code {
+        font-size: 1.3rem;
+        font-weight: 700;
+        word-break: break-all;
+        background: #fff;
+        padding: 14px;
+        border-radius: 10px;
+      }
+      button {
+        width: 100%;
+        padding: 14px;
+        font-size: 1rem;
+        font-weight: 600;
+        border: 0;
+        border-radius: 10px;
+        background: #1565c0;
+        color: #fff;
+        margin-top: 10px;
+        cursor: pointer;
+      }
+      button.sec { background: #e0e0e0; color: #1a1a1a; }
+      button:active { opacity: 0.85; }
+    </style>
+  </head>
+  <body>
+    <h1>Scanner — Ensina Blumenau</h1>
+
+    <video id="video" playsinline muted></video>
+    <div class="status" id="status">Iniciando camera…</div>
+
+    <div id="resultado" hidden>
+      <div class="code" id="code"></div>
+      <button id="enviar">Enviar para o app</button>
+      <button id="copiar" class="sec">Copiar codigo</button>
+      <button id="denovo" class="sec">Escanear outro</button>
+    </div>
+
+    <!-- ZXing: leitura ao vivo de codigo de barras / QR (pagina top-level, fora do iframe do Apps Script). -->
+    <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+    <script>
+      // ?return=<URL do /exec do Apps Script> — para onde devolver o codigo lido.
+      var params = new URLSearchParams(location.search);
+      var returnUrl = params.get('return');
+
+      var hints = new Map();
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+        ZXing.BarcodeFormat.EAN_13,
+        ZXing.BarcodeFormat.EAN_8,
+        ZXing.BarcodeFormat.CODE_128,
+        ZXing.BarcodeFormat.ITF,
+        ZXing.BarcodeFormat.QR_CODE,
+      ]);
+      var reader = new ZXing.BrowserMultiFormatReader(hints);
+      var parado = false;
+
+      function setStatus(msg, cls) {
+        var s = document.getElementById('status');
+        s.textContent = msg;
+        s.className = 'status' + (cls ? ' ' + cls : '');
+      }
+
+      function iniciar() {
+        parado = false;
+        document.getElementById('resultado').hidden = true;
+        setStatus('Aponte a camera para o codigo de barras ou QR…');
+        reader
+          .decodeFromConstraints({ video: { facingMode: 'environment' } }, 'video', function (result, err) {
+            if (result && !parado) {
+              parado = true;
+              reader.reset();
+              mostrar(result.getText(), result.getBarcodeFormat());
+            }
+            // err em cada quadro sem leitura e' normal (NotFoundException) — ignorar.
+          })
+          .catch(function (e) {
+            setStatus('Erro ao abrir a camera: ' + (e && e.message ? e.message : e), 'err');
+          });
+      }
+
+      function mostrar(code, formato) {
+        document.getElementById('code').textContent = code;
+        document.getElementById('resultado').hidden = false;
+        setStatus('Codigo lido (formato ' + formato + ')!', 'ok');
+        if (navigator.vibrate) navigator.vibrate(120);
+
+        document.getElementById('enviar').onclick = function () {
+          if (!returnUrl) {
+            alert('Sem URL de retorno. Abra esta pagina com ?return=<URL do app>.');
+            return;
+          }
+          var sep = returnUrl.indexOf('?') >= 0 ? '&' : '?';
+          location.href = returnUrl + sep + 'code=' + encodeURIComponent(code);
+        };
+        document.getElementById('copiar').onclick = function () {
+          if (navigator.clipboard) navigator.clipboard.writeText(code);
+        };
+        document.getElementById('denovo').onclick = iniciar;
+      }
+
+      iniciar();
+    </script>
+  </body>
+</html>

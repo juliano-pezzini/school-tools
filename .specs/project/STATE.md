@@ -56,6 +56,13 @@
 **Trade-off:** Decisão **NÃO é definitiva** — depende de comprovação técnica nos spikes. Se Apps Script não comportar os desafios abaixo, escalar para B/C na(s) ferramenta(s) afetada(s).
 **Impact:** Condicionada à validação, via spikes, de TODOS estes desafios: (1) integração NFe/NFC-e; (2) leitura de QR/código de barras (incl. ISBN); (3) geração de relatórios; (4) gráficos/insights; (5) controle de autorização por papéis integrado ao SSO Google. Falha em qualquer um reabre a decisão para a ferramenta correspondente.
 
+### AD-008: Scanner de código/QR roda em página estática hospedada à parte (2026-06-20)
+
+**Decision:** A leitura de código de barras/QR (ISBN na biblioteca, NFC-e no caixa) roda numa **página estática hospedada à parte** (GitHub Pages, em `docs/scanner/`) com scan de vídeo ao vivo (ZXing), **não** dentro do HtmlService. A página devolve o código ao Apps Script via round-trip `?return=…` → `?code=…`.
+**Reason:** Comprovado empiricamente (2026-06-20): o HtmlService bloqueia `getUserMedia` (sem `allow="camera"`) e a leitura por foto estática é não confiável (ZXing não detecta). Scan ao vivo exige página top-level fora do iframe.
+**Trade-off:** Um satélite estático extra a hospedar/manter (grátis no Pages, agent-buildable). Round-trip por URL precisa de cuidado (validar/sanitizar o `code` recebido).
+**Impact:** Mantém a stack A (dados/SSO/telas no Apps Script). Vale para os 3 apps que escaneiam. ZXing carrega OK sob a CSP do HtmlService (validado) — útil para decodificação auxiliar, mas a captura ao vivo fica no Pages.
+
 ---
 
 ## Active Blockers
@@ -94,6 +101,7 @@
 **Impact:** 🔴 Afeta todas as leituras (ISBN, QR/NFC-e, barcode). Se `getUserMedia` não funcionar no sandbox do HtmlService, o scanner não roda dentro do Apps Script.
 **Workaround:** Página de scanner hospedada à parte (GitHub Pages) que envia o código lido ao Apps Script.
 **Resolution:** Testado junto com B-004 no `spikes/m0-hello-world/` (botão “Testar câmera” via `getUserMedia` dentro do iframe do HtmlService).
+**Finding (2026-06-20, conta pessoal):** `getUserMedia` ao vivo **BLOQUEADO** no iframe do HtmlService — `NotAllowedError: Permission denied`, sem prompt (a Permissions Policy do iframe não inclui `allow="camera"`; não é negação do usuário). `<input type="file" capture="environment">` (câmera nativa) funciona, e **ZXing carrega OK sob a CSP**, mas **decodificar de foto estática falhou** mesmo com `TRY_HARDER`+hints (`NotFoundException`). **RESOLVIDO via AD-008:** scan ao vivo numa página hospedada à parte (`docs/scanner/`), devolvendo o código ao Apps Script. Spike pendente de publicar no Pages e validar no celular.
 
 ### B-006: Acesso externo da associação (APP) vs. premissa SSO-only
 
@@ -106,7 +114,8 @@
 
 ## Lessons Learned
 
-_(none yet)_
+- **HtmlService bloqueia `getUserMedia`:** o iframe do Apps Script não delega `allow="camera"`, então scanner de vídeo ao vivo falha com `NotAllowedError` (sem prompt). Solução: `<input type="file" accept="image/*" capture="environment">` abre a câmera nativa e funciona; decodificar o código da foto client-side (ex.: ZXing). Confirmado empiricamente em 2026-06-20.
+- **Conta pessoal de-risca parte do M0:** motor do Apps Script/HtmlService é idêntico ao Workspace — reproduz fielmente câmera/CSP/capacidades. **Não** reproduz: governança do admin (B-004), SSO por domínio e Shared Drives (são tenant-only).
 
 ---
 

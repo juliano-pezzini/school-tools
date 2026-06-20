@@ -62,10 +62,26 @@
     </div>
 
     <div class="card">
-      <div class="label">3. Teste da camera (scanner)</div>
+      <div class="label">3. Teste da camera (scanner ao vivo)</div>
       <button id="camBtn" onclick="testarCamera()">Testar camera</button>
       <video id="video" autoplay playsinline muted style="display: none;"></video>
       <div class="status muted" id="camStatus">Aperte o botao e permita o acesso a camera.</div>
+    </div>
+
+    <div class="card">
+      <div class="label">4. Plano B: camera nativa (foto)</div>
+      <input type="file" accept="image/*" capture="environment" id="fileInput" style="display: none;" onchange="onFoto(event)" />
+      <button onclick="document.getElementById('fileInput').click()">Tirar foto com a camera nativa</button>
+      <img id="foto" alt="" style="display: none; width: 100%; border-radius: 10px; margin-top: 12px;" />
+      <div class="status muted" id="fotoStatus">Abre o app de camera do celular (nao usa getUserMedia).</div>
+    </div>
+
+    <div class="card">
+      <div class="label">5. Decodificar codigo da foto (ZXing + CSP)</div>
+      <input type="file" accept="image/*" capture="environment" id="fileInputDec" style="display: none;" onchange="onDecodificar(event)" />
+      <button onclick="document.getElementById('fileInputDec').click()">Fotografar um codigo de barras / QR</button>
+      <img id="fotoDec" alt="" style="display: none; width: 100%; border-radius: 10px; margin-top: 12px;" />
+      <div class="status muted" id="decStatus">Aponte para um ISBN, codigo de barras ou QR e fotografe.</div>
     </div>
 
     <script>
@@ -113,6 +129,82 @@
           status.className = 'status ok';
         } catch (e) {
           status.textContent = 'FALHOU: ' + e.name + ' — ' + e.message;
+          status.className = 'status err';
+        }
+      }
+
+      // 4. Plano B (B-005) — camera nativa via <input capture>, sem getUserMedia.
+      // Driba a Permissions Policy do iframe: abre o app de camera do celular.
+      function onFoto(ev) {
+        var status = document.getElementById('fotoStatus');
+        var arquivo = ev.target.files && ev.target.files[0];
+        if (!arquivo) {
+          status.textContent = 'Nenhuma foto capturada.';
+          status.className = 'status err';
+          return;
+        }
+        var img = document.getElementById('foto');
+        img.src = URL.createObjectURL(arquivo);
+        img.style.display = 'block';
+        status.textContent =
+          'SUCESSO! Foto capturada (' + Math.round(arquivo.size / 1024) +
+          ' KB). A camera nativa funciona dentro do HtmlService.';
+        status.className = 'status ok';
+      }
+
+      // 5. Decodificacao (B-005 + lib externa sob CSP) — carrega ZXing de um CDN
+      // e tenta ler o codigo da foto. Valida 2 coisas: <script src> externo passa
+      // na CSP do HtmlService E a decodificacao funciona a partir de uma foto.
+      function carregarZXing() {
+        return new Promise(function (resolve, reject) {
+          if (window.ZXing) return resolve(window.ZXing);
+          var s = document.createElement('script');
+          s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+          s.onload = function () {
+            window.ZXing ? resolve(window.ZXing) : reject(new Error('ZXing carregou mas o global nao apareceu'));
+          };
+          s.onerror = function () {
+            reject(new Error('CSP/CDN bloqueou o carregamento do ZXing (script externo barrado)'));
+          };
+          document.head.appendChild(s);
+        });
+      }
+
+      async function onDecodificar(ev) {
+        var status = document.getElementById('decStatus');
+        var arquivo = ev.target.files && ev.target.files[0];
+        if (!arquivo) {
+          status.textContent = 'Nenhuma foto capturada.';
+          status.className = 'status err';
+          return;
+        }
+        var img = document.getElementById('fotoDec');
+        var url = URL.createObjectURL(arquivo);
+        img.src = url;
+        img.style.display = 'block';
+        status.textContent = 'Carregando ZXing e decodificando…';
+        status.className = 'status muted';
+        try {
+          var ZX = await carregarZXing();
+          var hints = new Map();
+          hints.set(ZX.DecodeHintType.TRY_HARDER, true);
+          hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [
+            ZX.BarcodeFormat.EAN_13,
+            ZX.BarcodeFormat.EAN_8,
+            ZX.BarcodeFormat.CODE_128,
+            ZX.BarcodeFormat.QR_CODE,
+          ]);
+          var reader = new ZX.BrowserMultiFormatReader(hints);
+          var result = await reader.decodeFromImageUrl(url);
+          status.textContent =
+            'SUCESSO! Codigo lido: ' + result.getText() +
+            ' (formato: ' + result.getBarcodeFormat() + ')';
+          status.className = 'status ok';
+        } catch (e) {
+          status.textContent =
+            'ZXing carregou OK, mas nao leu o codigo: ' +
+            (e && e.name ? e.name + ' — ' : '') + (e && e.message ? e.message : e) +
+            ' (foto estatica e pouco confiavel; enquadre so o codigo, bem focado)';
           status.className = 'status err';
         }
       }

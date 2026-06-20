@@ -31,10 +31,12 @@
 
 - 🔴 Pode invalidar a stack A. Confirmar com o admin do Workspace municipal: deploy de web app Apps Script para o domínio, Apps Script API habilitada (para `clasp`/CI), escopos OAuth, Shared Drives e compartilhamento externo, cotas multiusuário.
 
-**Spike de UI Mobile / Scanner no HtmlService** - PLANNED
+**Spike de UI Mobile / Scanner no HtmlService** - COMPLETE (B-005 resolvido)
 
-- 🔴 Validar acesso à câmera (`getUserMedia`) dentro do iframe sandbox do HtmlService e carga de libs externas (ZXing/Chart.js) sob a CSP. Plano B: página de scanner hospedada à parte (GitHub Pages).
-- Inclui: upload de foto de comprovante do celular, integridade de dados (LockService/concorrência, auditoria append-only, backup), isolamento server-side de privacidade (banco de horas) e localização pt-BR.
+- ✅ Comprovado empiricamente (conta pessoal, 2026-06-20): deploy de web app + identidade/SSO funcionam; `getUserMedia` ao vivo **bloqueado** no iframe do HtmlService; foto nativa via `<input capture>` funciona mas decodificação de still é não confiável; **ZXing carrega OK sob a CSP**.
+- → **AD-008:** scanner de vídeo ao vivo numa **página hospedada à parte** (`docs/scanner/`, GitHub Pages), devolvendo o código ao Apps Script via `?return=`→`?code=`.
+- Pendente: publicar no Pages e validar leitura ao vivo de ISBN/QR no celular.
+- Demais itens do M0 seguem: upload de foto de comprovante, integridade de dados (LockService/concorrência, auditoria append-only, backup), isolamento server-side de privacidade (banco de horas), localização pt-BR.
 
 **Spike NFe/NFC-e** - PLANNED
 
