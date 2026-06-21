@@ -285,13 +285,19 @@
             '</div>';
         } else if (p.modelo === '55') {
           html += '<div class="card"><h2>3. Itens + valor (NFe)</h2>' +
-            '<div class="muted">A NFe completa exige MeuDanfe (API paga R$0,03 + chave, via backend) ou OCR do DANFE. ' +
-            'Para teste manual, copie a chave acima e cole em meudanfe.com.br.</div>' +
-            '<a class="linkbtn" href="https://meudanfe.com.br/" target="_blank" rel="noopener"><button class="sec">Abrir MeuDanfe</button></a>' +
+            '<div class="muted">NFe não tem link público gratuito por chave. Os itens só vêm do XML, via MeuDanfe (pago R$0,03 + API-Key, por backend) ou OCR do DANFE.</div>' +
+            '<button id="btnDanfe" class="sec">Copiar chave e abrir MeuDanfe</button>' +
             '</div>';
         }
 
         out.innerHTML = html;
+
+        var btnDanfe = document.getElementById('btnDanfe');
+        if (btnDanfe) btnDanfe.onclick = function () {
+          if (navigator.clipboard) navigator.clipboard.writeText(ch).catch(function () {});
+          btnDanfe.textContent = 'Chave copiada! Cole no MeuDanfe';
+          window.open('https://meudanfe.com.br/', '_blank', 'noopener');
+        };
 
         // chamada BrasilAPI (CORS liberado)
         try {
