@@ -112,9 +112,15 @@ Itens descobertos na revisão completa da spec. Prioridade: 🔴 pode invalidar 
 - 🟡 **Localização pt-BR:** R$, vírgula decimal, dd/mm/aaaa, timezone `America/Sao_Paulo`.
 
 ### F. NFe/NFC-e (detalha B-003)
-- 🟠 Distinguir **NFC-e** (QR) de **NFe** (DANFE Code-128 + chave de 44 dígitos).
-- 🔴 O que é extraível **sem certificado A1/A3**: URL do QR → página SEFAZ-SC (possível captcha); dados embutidos na própria chave (CNPJ/UF/valor parcial).
-- 🟡 **Fallback manual** sempre disponível.
+**Requisito:** obter **valor + itens** automaticamente. Compras são **mistas** (CNPJ da APP às vezes, cupom às vezes); recebem **NFC-e (QR)** e **NFe (DANFE)**; **sem certificado digital** (evitar custo).
+- ✅ **Chave de acesso (44 díg.) decodificável offline:** UF, ano/mês, **CNPJ emitente**, modelo, série, número (não traz valor/itens).
+- 🟢 **Nome do fornecedor automático:** CNPJ → **BrasilAPI** (`/api/cnpj/v1/{cnpj}`, grátis, sem auth) → razão social/nome fantasia. (Confirmado 2026-06-20.)
+- ✅ **NFe (DANFE):** chave do código de barras → **MeuDanfe** (consulta por chave, **grátis e sem certificado**, com API) → **XML completo (itens+valores)**. (Serviço confirmado 2026-06-20; falta validar com chave real.)
+- 🟠 **NFC-e (QR):** captcha só na consulta **manual**; o **link do QR** (chave|versão|amb|token|hash) tende a abrir a nota completa **sem captcha** — **validar com cupom real**. MeuDanfe pode também cobrir NFC-e por chave (testar).
+- 🟡 **OCR do cupom/DANFE impresso** (itens+total em texto) como fallback certificado-free quando QR/chave falham.
+- 🔴 **Caminho oficial descartado por escolha:** e-CNPJ A1 + Distribuição DFe daria XML oficial, mas exige certificado pago — evitado.
+- 🔴 **Riscos:** dependência de **terceiros** (MeuDanfe pode mudar/limitar/cobrar; checar **ToS**) e de **scraping SEFAZ** (anti-bot/mudança de página). Mitigar com cache, retries e fallback OCR/manual.
+- 🟡 **Testes pendentes (nota real):** (1) link do QR da NFC-e abre itens sem captcha? (2) MeuDanfe retorna XML para uma chave de NFe e de NFC-e? (3) taxa de leitura do QR/Code-128 no scanner.
 
 ### G. Robô da Biblioteca (detalha B-002)
 - 🟡 **Pergamum central identificado** (`pergamum.blumenau.sc.gov.br`, SPA, internet pública), mas o filtro de unidades **não lista escolas** → a biblioteca da **escola usa outro sistema** (a confirmar). Central serve só de referência.

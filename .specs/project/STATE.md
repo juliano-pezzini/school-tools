@@ -90,6 +90,10 @@
 **Impact:** Afeta a feature "Captura por NFe/NFC-e" do M1 — consulta à SEFAZ pode exigir certificado/captcha.
 **Workaround:** Permitir entrada manual da despesa como fallback.
 **Resolution:** Concluir o Spike NFe/NFC-e no M0.
+**Finding (2026-06-20, pesquisa web):** Consulta manual por chave na SEFAZ-SC (`sat.sef.sc.gov.br/nfce/consulta`) **exige captcha** ("Validação de segurança") → inviável automatizar. O portal do contribuinte exige senha ou **certificado digital ICP-Brasil**. **A chave de acesso (44 díg.) é decodificável offline** (sem rede/certificado): UF, ano/mês, **CNPJ do emitente**, modelo, série, número — mas **NÃO** traz valor nem itens. QR da NFC-e v2.00 só carrega chave+token+hash (valor/itens exigem abrir a página SEFAZ, com anti-bot/captcha — frágil). DANFE Code-128 traz só a chave. **API pública grátis confirmada:** BrasilAPI `https://brasilapi.com.br/api/cnpj/v1/{cnpj}` retorna razão social / nome fantasia / endereço, sem auth.
+**Requisito reforcado (2026-06-20):** valor + itens são **obrigatórios** (não basta o usuário digitar o total). Compras **mistas** (CNPJ da APP às vezes, cupom às vezes); recebem **NFC-e (QR)** e **NFe (DANFE)**; **sem certificado** (evitar custo).
+**Caminho certificado-free para itens+valor (2026-06-20):** (a) **NFe** → chave → **MeuDanfe** (consulta por chave grátis, sem certificado, com API) → XML completo (itens+valores), confirmado como serviço; (b) **NFC-e** → scraping do **link do QR** na SEFAZ (captcha só na consulta manual — validar com cupom real); (c) **OCR** do cupom/DANFE impresso como fallback; (d) **manual** último recurso. **Riscos:** dependência de terceiros (MeuDanfe — checar ToS/limite) e de scraping SEFAZ. **Testes pendentes (nota real):** link do QR abre itens sem captcha? MeuDanfe retorna XML p/ chave de NFe e NFC-e?
+**Decisão de arquitetura (de-risca B-003):** v1 NÃO depende de certificado. Combina chave (CNPJ/data offline) + BrasilAPI (fornecedor) + MeuDanfe/scraping-QR (itens+valor) + OCR/manual de fallback.
 
 ### B-004: Políticas de governança do Workspace municipal desconhecidas
 
