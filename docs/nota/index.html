@@ -69,6 +69,7 @@
       var video = document.getElementById('video');
       var parado = false, stream = null, track = null;
       var ultimo = null, repeticoes = 0;
+      var focoTimer = null;
 
       function setStatus(msg, cls) {
         var s = document.getElementById('status');
@@ -85,6 +86,11 @@
         await video.play();
         track = stream.getVideoTracks()[0];
         ajustarCamera();
+        // Reaplica foco continuo durante TODA a sessao de leitura — alguns Samsung
+        // perdem o lock de autofoco e precisam ser "cutucados" de novo.
+        if (focoTimer) clearInterval(focoTimer);
+        focoTimer = setInterval(ajustarCamera, 1200);
+        // Detecta a lanterna nas primeiras tentativas; se nunca reportar, mostra mesmo assim.
         var n = 0, t = setInterval(function () {
           n++; ajustarCamera();
           if (!document.getElementById('lanterna').hidden) clearInterval(t);
@@ -113,6 +119,7 @@
         };
       }
       function pararCamera() {
+        if (focoTimer) { clearInterval(focoTimer); focoTimer = null; }
         try { if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
         stream = null; track = null;
         document.getElementById('lanterna').hidden = true;
