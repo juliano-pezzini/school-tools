@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Teste de Nota — Ensina Blumenau</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        padding: 16px;
+        background: #f4f6f8;
+        color: #1a1a1a;
+      }
+      h1 { font-size: 1.2rem; margin: 0 0 4px; }
+      p.sub { margin: 0 0 14px; color: #666; font-size: 0.85rem; }
+      #video { width: 100%; max-height: 50vh; border-radius: 12px; background: #000; object-fit: cover; }
+      .status { padding: 12px; border-radius: 8px; margin-top: 10px; font-weight: 600; background: #fff; }
+      .ok { background: #e6f4ea; color: #137333; }
+      .err { background: #fce8e6; color: #c5221f; }
+      .card { background: #fff; border-radius: 12px; padding: 14px; margin-top: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+      .card h2 { font-size: 0.95rem; margin: 0 0 8px; }
+      .row { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.9rem; }
+      .row:last-child { border-bottom: 0; }
+      .row .k { color: #666; }
+      .row .v { font-weight: 600; text-align: right; word-break: break-all; }
+      button {
+        width: 100%; padding: 13px; font-size: 1rem; font-weight: 600;
+        border: 0; border-radius: 10px; background: #1565c0; color: #fff; margin-top: 10px; cursor: pointer;
+      }
+      button.sec { background: #e0e0e0; color: #1a1a1a; }
+      button:active { opacity: 0.85; }
+      input[type=text] {
+        width: 100%; padding: 12px; font-size: 0.95rem; border: 1px solid #ccc;
+        border-radius: 10px; margin-top: 8px;
+      }
+      .muted { color: #666; font-weight: 400; font-size: 0.85rem; }
+      a.linkbtn { display: block; text-align: center; text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <h1>Teste de Nota Fiscal</h1>
+    <p class="sub">Escaneie o código de barras (NFe) ou o QR (NFC-e), ou cole a chave/URL abaixo.</p>
+
+    <video id="video" playsinline muted autoplay></video>
+    <div class="status" id="status">Iniciando camera…</div>
+    <button id="lanterna" class="sec" hidden>Lanterna</button>
+
+    <div class="card">
+      <h2>Ou cole manualmente</h2>
+      <input type="text" id="manual" placeholder="Chave de 44 dígitos ou URL do QR da NFC-e" />
+      <button id="btnManual">Testar este valor</button>
+    </div>
+
+    <div id="resultado"></div>
+
+    <button id="denovo" class="sec" hidden>Escanear outro</button>
+
+    <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+    <script>
+      var FORMATOS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'itf', 'qr_code'];
+      var UF = {
+        11:'RO',12:'AC',13:'AM',14:'RR',15:'PA',16:'AP',17:'TO',21:'MA',22:'PI',23:'CE',
+        24:'RN',25:'PB',26:'PE',27:'AL',28:'SE',29:'BA',31:'MG',32:'ES',33:'RJ',35:'SP',
+        41:'PR',42:'SC',43:'RS',50:'MS',51:'MT',52:'GO',53:'DF'
+      };
+      var video = document.getElementById('video');
+      var parado = false, stream = null, track = null;
+      var ultimo = null, repeticoes = 0;
+
+      function setStatus(msg, cls) {
+        var s = document.getElementById('status');
+        s.textContent = msg;
+        s.className = 'status' + (cls ? ' ' + cls : '');
+      }
+
+      // ---------- Camera + leitura (mesma tecnica do scanner) ----------
+      async function abrirCamera() {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        });
+        video.srcObject = stream;
+        await video.play();
+        track = stream.getVideoTracks()[0];
+        ajustarCamera();
+        var n = 0, t = setInterval(function () {
+          n++; ajustarCamera();
+          if (!document.getElementById('lanterna').hidden) clearInterval(t);
+          else if (n >= 6) { clearInterval(t); prepararLanterna(); }
+        }, 600);
+      }
+      function ajustarCamera() {
+        if (!track || !track.getCapabilities) return;
+        var caps = track.getCapabilities();
+        if (caps.focusMode && caps.focusMode.indexOf('continuous') >= 0) {
+          track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(function () {});
+        }
+        if (caps.torch) prepararLanterna();
+      }
+      var torchOn = false;
+      function prepararLanterna() {
+        var btn = document.getElementById('lanterna');
+        if (!btn.hidden) return;
+        btn.hidden = false;
+        btn.onclick = function () {
+          if (!track) return;
+          torchOn = !torchOn;
+          track.applyConstraints({ advanced: [{ torch: torchOn }] })
+            .then(function () { btn.textContent = torchOn ? 'Apagar lanterna' : 'Lanterna'; })
+            .catch(function () { torchOn = false; btn.textContent = 'Lanterna (nao suportada)'; });
+        };
+      }
+      function pararCamera() {
+        try { if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+        stream = null; track = null;
+        document.getElementById('lanterna').hidden = true;
+      }
+      function candidato(code) {
+        if (parado) return;
+        if (code === ultimo) repeticoes++; else { ultimo = code; repeticoes = 1; }
+        if (repeticoes >= 2) { parado = true; pararCamera(); processar(code); }
+      }
+      async function loopNativo(detector) {
+        if (parado) return;
+        try {
+          var codes = await detector.detect(video);
+          if (codes && codes.length) candidato(codes[0].rawValue);
+        } catch (e) {}
+        if (!parado) requestAnimationFrame(function () { loopNativo(detector); });
+      }
+      function iniciarZXing() {
+        var hints = new Map();
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+          ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.ITF, ZXing.BarcodeFormat.QR_CODE,
+          ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+        ]);
+        var reader = new ZXing.BrowserMultiFormatReader(hints);
+        reader.decodeFromStream(stream, video, function (result) {
+          if (result && !parado) candidato(result.getText());
+        }).catch(function (e) { setStatus('Erro no leitor: ' + (e && e.message ? e.message : e), 'err'); });
+      }
+      async function iniciar() {
+        parado = false; ultimo = null; repeticoes = 0;
+        document.getElementById('denovo').hidden = true;
+        setStatus('Aponte para o código de barras (NFe) ou QR (NFC-e)…');
+        try { await abrirCamera(); }
+        catch (e) { setStatus('Erro ao abrir a camera: ' + (e && e.message ? e.message : e), 'err'); return; }
+        if ('BarcodeDetector' in window) {
+          var sup = []; try { sup = await window.BarcodeDetector.getSupportedFormats(); } catch (e) {}
+          var fmts = FORMATOS.filter(function (f) { return sup.indexOf(f) >= 0; });
+          loopNativo(new window.BarcodeDetector(fmts.length ? { formats: fmts } : undefined));
+        } else { iniciarZXing(); }
+      }
+
+      // ---------- Extracao da chave + classificacao ----------
+      // Aceita: 44 digitos puros, "NFe<44 digitos>", ou URL de QR com ?p=<chave>|...
+      function extrairChave(valor) {
+        if (!valor) return null;
+        var v = String(valor).trim();
+        // URL do QR da NFC-e: parametro p=chave|versao|...
+        var m = v.match(/[?&]p=([^|&]+)/i);
+        if (m) { var c = m[1].replace(/\D/g, ''); if (c.length >= 44) return c.slice(0, 44); }
+        // qualquer sequencia de 44 digitos
+        var d = v.replace(/\D/g, '');
+        var m44 = d.match(/\d{44}/);
+        if (m44) return m44[0];
+        return null;
+      }
+
+      function parseChave(ch) {
+        return {
+          chave: ch,
+          cUF: ch.slice(0, 2),
+          uf: UF[parseInt(ch.slice(0, 2), 10)] || '??',
+          ano: '20' + ch.slice(2, 4),
+          mes: ch.slice(4, 6),
+          cnpj: ch.slice(6, 20),
+          modelo: ch.slice(20, 22),
+          serie: ch.slice(22, 25),
+          numero: ch.slice(25, 34),
+          tpEmis: ch.slice(34, 35),
+          cDV: ch.slice(43, 44),
+        };
+      }
+      function fmtCNPJ(c) {
+        return c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+      }
+
+      function linha(k, v) {
+        return '<div class="row"><span class="k">' + k + '</span><span class="v">' + (v || '—') + '</span></div>';
+      }
+
+      async function processar(valor) {
+        var out = document.getElementById('resultado');
+        document.getElementById('denovo').hidden = false;
+        var ch = extrairChave(valor);
+        if (!ch) {
+          out.innerHTML = '<div class="card err"><strong>Não reconheci uma chave de 44 dígitos.</strong>' +
+            '<div class="muted" style="margin-top:6px">Valor lido:<br>' + escapeHtml(valor) + '</div></div>';
+          setStatus('Valor lido, mas sem chave de 44 dígitos.', 'err');
+          return;
+        }
+        setStatus('Chave lida! Consultando dados…', 'ok');
+        var p = parseChave(ch);
+        var tipo = p.modelo === '55' ? 'NFe (modelo 55)' : (p.modelo === '65' ? 'NFC-e (modelo 65)' : 'modelo ' + p.modelo);
+
+        var html = '<div class="card"><h2>1. Chave decodificada (offline)</h2>' +
+          linha('Tipo', tipo) +
+          linha('UF', p.uf + ' (' + p.cUF + ')') +
+          linha('Emissão', p.mes + '/' + p.ano) +
+          linha('CNPJ emitente', fmtCNPJ(p.cnpj)) +
+          linha('Série / Número', p.serie + ' / ' + p.numero) +
+          linha('Chave', ch) +
+          '</div>';
+
+        // 2. Fornecedor via BrasilAPI
+        html += '<div class="card" id="cardCnpj"><h2>2. Fornecedor (BrasilAPI)</h2>' +
+          '<div class="muted">consultando…</div></div>';
+
+        // 3. Itens + valor
+        if (p.modelo === '65') {
+          var url = 'https://sat.sef.sc.gov.br/nfce/consulta?p=' + ch + '|2|1|';
+          html += '<div class="card"><h2>3. Itens + valor (NFC-e)</h2>' +
+            '<div class="muted">Abra a nota na SEFAZ e veja se mostra os itens SEM captcha:</div>' +
+            '<a class="linkbtn" href="' + url + '" target="_blank" rel="noopener"><button>Abrir nota na SEFAZ-SC</button></a>' +
+            '<div class="muted" style="margin-top:8px">Obs.: o link do app não tem o token/hash do cupom; se pedir captcha, testaremos com a URL completa do QR.</div>' +
+            '</div>';
+        } else if (p.modelo === '55') {
+          html += '<div class="card"><h2>3. Itens + valor (NFe)</h2>' +
+            '<div class="muted">A NFe completa exige MeuDanfe (API paga R$0,03 + chave, via backend) ou OCR do DANFE. ' +
+            'Para teste manual, copie a chave acima e cole em meudanfe.com.br.</div>' +
+            '<a class="linkbtn" href="https://meudanfe.com.br/" target="_blank" rel="noopener"><button class="sec">Abrir MeuDanfe</button></a>' +
+            '</div>';
+        }
+
+        out.innerHTML = html;
+
+        // chamada BrasilAPI (CORS liberado)
+        try {
+          var r = await fetch('https://brasilapi.com.br/api/cnpj/v1/' + p.cnpj);
+          var card = document.getElementById('cardCnpj');
+          if (r.ok) {
+            var d = await r.json();
+            card.innerHTML = '<h2>2. Fornecedor (BrasilAPI)</h2>' +
+              linha('Razão social', d.razao_social) +
+              linha('Nome fantasia', d.nome_fantasia) +
+              linha('Município/UF', (d.municipio || '') + '/' + (d.uf || '')) +
+              linha('Situação', d.descricao_situacao_cadastral) +
+              linha('CNAE', d.cnae_fiscal_descricao);
+          } else {
+            card.innerHTML = '<h2>2. Fornecedor (BrasilAPI)</h2><div class="err status">HTTP ' + r.status + ' — não encontrado.</div>';
+          }
+        } catch (e) {
+          document.getElementById('cardCnpj').innerHTML =
+            '<h2>2. Fornecedor (BrasilAPI)</h2><div class="err status">Erro: ' + (e && e.message ? e.message : e) + '</div>';
+        }
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+          return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+        });
+      }
+
+      // ---------- Eventos ----------
+      document.getElementById('btnManual').onclick = function () {
+        var v = document.getElementById('manual').value;
+        if (!v.trim()) return;
+        parado = true; pararCamera();
+        processar(v);
+      };
+      document.getElementById('denovo').onclick = iniciar;
+
+      iniciar();
+    </script>
+  </body>
+</html>
