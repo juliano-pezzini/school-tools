@@ -284,20 +284,14 @@
             '<div class="muted" style="margin-top:8px">Obs.: o link do app não tem o token/hash do cupom; se pedir captcha, testaremos com a URL completa do QR.</div>' +
             '</div>';
         } else if (p.modelo === '55') {
-          html += '<div class="card"><h2>3. Itens + valor (NFe)</h2>' +
-            '<div class="muted">NFe não tem link público gratuito por chave. Os itens só vêm do XML, via MeuDanfe (pago R$0,03 + API-Key, por backend) ou OCR do DANFE.</div>' +
-            '<button id="btnDanfe" class="sec">Copiar chave e abrir MeuDanfe</button>' +
+          html += '<div class="card" id="cardNFe"><h2>3. Itens + valor (NFe)</h2>' +
+            '<div class="muted" id="nfeStatus">Consultando itens em consultadanfe.com…</div>' +
             '</div>';
         }
 
         out.innerHTML = html;
 
-        var btnDanfe = document.getElementById('btnDanfe');
-        if (btnDanfe) btnDanfe.onclick = function () {
-          if (navigator.clipboard) navigator.clipboard.writeText(ch).catch(function () {});
-          btnDanfe.textContent = 'Chave copiada! Cole no MeuDanfe';
-          window.open('https://meudanfe.com.br/', '_blank', 'noopener');
-        };
+        if (p.modelo === '55') consultarNFe(ch);
 
         // chamada BrasilAPI (CORS liberado)
         try {
@@ -324,6 +318,83 @@
         return String(s).replace(/[&<>"']/g, function (c) {
           return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
         });
+      }
+
+      // ---------- NFe (modelo 55): itens+valor via consultadanfe.com ----------
+      // API gratuita, sem cadastro/key, CORS liberado; cobre o MES CORRENTE (modelo 55).
+      function fmtNum(v) {
+        var n = parseFloat(v);
+        return isNaN(n) ? (v || '') : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+      function decodeBase64Utf8(b64) {
+        var bin = atob(b64);
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return new TextDecoder('utf-8').decode(bytes);
+      }
+      function txt(node, tag) {
+        var el = node.getElementsByTagName(tag)[0];
+        return el ? el.textContent : '';
+      }
+      function ligarBtnDanfe(ch) {
+        var btn = document.getElementById('btnDanfe');
+        if (!btn) return;
+        btn.onclick = function () {
+          if (navigator.clipboard) navigator.clipboard.writeText(ch).catch(function () {});
+          btn.textContent = 'Chave copiada! Cole no MeuDanfe';
+          window.open('https://meudanfe.com.br/', '_blank', 'noopener');
+        };
+      }
+      function fallbackNFe(card, ch, motivo) {
+        card.innerHTML = '<h2>3. Itens + valor (NFe)</h2>' +
+          '<div class="muted">' + escapeHtml(motivo) + '</div>' +
+          '<button id="btnDanfe" class="sec">Copiar chave e abrir MeuDanfe</button>';
+        ligarBtnDanfe(ch);
+      }
+      async function consultarNFe(ch) {
+        var card = document.getElementById('cardNFe');
+        if (!card) return;
+        try {
+          var r = await fetch('https://consultadanfe.com/api/v1/consulta', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chave: ch }),
+          });
+          var data = await r.json().catch(function () { return {}; });
+          if (!r.ok || !data.xml_base64) {
+            var cod = (data && data.error) || ('HTTP ' + r.status);
+            fallbackNFe(card, ch, 'Consulta automatica gratuita falhou (' + cod + '). ' +
+              'Ela cobre so o mes corrente (modelo 55); para nota antiga e preciso o XML ou o MeuDanfe.');
+            return;
+          }
+          var xml = decodeBase64Utf8(data.xml_base64);
+          var doc = new DOMParser().parseFromString(xml, 'application/xml');
+          renderNFe(card, doc);
+        } catch (e) {
+          fallbackNFe(card, ch, 'Erro ao consultar itens: ' + (e && e.message ? e.message : e));
+        }
+      }
+      function renderNFe(card, doc) {
+        var total = txt(doc, 'vNF');
+        var emit = doc.getElementsByTagName('emit')[0];
+        var fornec = emit ? txt(emit, 'xNome') : '';
+        var dets = doc.getElementsByTagName('det');
+        var rows = '';
+        for (var i = 0; i < dets.length; i++) {
+          var prod = dets[i].getElementsByTagName('prod')[0];
+          if (!prod) continue;
+          var nome = txt(prod, 'xProd');
+          var q = txt(prod, 'qCom');
+          var vp = txt(prod, 'vProd');
+          rows += '<div class="row"><span class="k">' + escapeHtml(nome) +
+            ' <span class="muted">(' + fmtNum(q) + ')</span></span>' +
+            '<span class="v">R$ ' + fmtNum(vp) + '</span></div>';
+        }
+        card.innerHTML = '<h2>3. Itens + valor (NFe) \u2014 consultadanfe.com</h2>' +
+          (fornec ? '<div class="muted" style="margin-bottom:6px">' + escapeHtml(fornec) + '</div>' : '') +
+          '<div class="row"><span class="k"><strong>TOTAL</strong></span><span class="v"><strong>R$ ' + fmtNum(total) + '</strong></span></div>' +
+          rows +
+          '<div class="muted" style="margin-top:8px">' + dets.length + ' item(ns), do XML autorizado da SEFAZ.</div>';
       }
 
       // ---------- Eventos ----------
