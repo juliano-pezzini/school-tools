@@ -72,7 +72,10 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
     <script>
-      var VERSAO = '2026-06-21 v7 (fornecedor NFe do XML)';
+      var VERSAO = '2026-06-21 v8 (valida DV + diagnostico CORS)';
+      // Quando houver backend (Apps Script doPost), coloque a URL /exec aqui.
+      // Vazio = tenta chamada direta (bloqueada pelo CORS do consultadanfe a partir do github.io).
+      var PROXY_URL = '';
       var FORMATOS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'itf', 'qr_code'];
       var UF = {
         11:'RO',12:'AC',13:'AM',14:'RR',15:'PA',16:'AP',17:'TO',21:'MA',22:'PI',23:'CE',
@@ -247,6 +250,20 @@
         return c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
       }
 
+      // Digito verificador (cDV, mod-11) da chave de 44 digitos — valida offline.
+      function dvChave(ch43) {
+        var pesos = [2, 3, 4, 5, 6, 7, 8, 9], soma = 0, p = 0;
+        for (var i = ch43.length - 1; i >= 0; i--) {
+          soma += parseInt(ch43.charAt(i), 10) * pesos[p % 8];
+          p++;
+        }
+        var dv = 11 - (soma % 11);
+        return dv >= 10 ? 0 : dv;
+      }
+      function chaveValida(ch) {
+        return /^\d{44}$/.test(ch) && dvChave(ch.slice(0, 43)) === parseInt(ch.charAt(43), 10);
+      }
+
       function linha(k, v) {
         return '<div class="row"><span class="k">' + k + '</span><span class="v">' + (v || '—') + '</span></div>';
       }
@@ -264,6 +281,7 @@
         setStatus('Chave lida! Consultando dados…', 'ok');
         var p = parseChave(ch);
         var tipo = p.modelo === '55' ? 'NFe (modelo 55)' : (p.modelo === '65' ? 'NFC-e (modelo 65)' : 'modelo ' + p.modelo);
+        var dvOk = chaveValida(ch);
 
         var html = '<div class="card"><h2>1. Chave decodificada (offline)</h2>' +
           linha('Tipo', tipo) +
@@ -271,8 +289,17 @@
           linha('Emissão', p.mes + '/' + p.ano) +
           linha('CNPJ emitente', fmtCNPJ(p.cnpj)) +
           linha('Série / Número', p.serie + ' / ' + p.numero) +
+          linha('Dígito verificador', dvOk ? 'válido ✓' : 'INVÁLIDO ✗ (leitura/digitação errada)') +
           linha('Chave', ch) +
           '</div>';
+
+        if (!dvOk) {
+          html += '<div class="card err"><strong>Chave com dígito verificador inválido.</strong>' +
+            '<div class="muted" style="margin-top:6px">Provável erro de leitura do código. Escaneie de novo (ou confira a digitação). Não vou consultar as APIs com uma chave inválida.</div></div>';
+          out.innerHTML = html;
+          setStatus('Chave inválida (dígito verificador). Releia o código.', 'err');
+          return;
+        }
 
         // 2. Fornecedor via BrasilAPI
         html += '<div class="card" id="cardCnpj"><h2>2. Fornecedor (BrasilAPI)</h2>' +
@@ -366,12 +393,32 @@
       async function consultarNFe(ch) {
         var card = document.getElementById('cardNFe');
         if (!card) return;
+        var st = document.getElementById('nfeStatus');
+        var alvo = PROXY_URL || 'https://consultadanfe.com/api/v1/consulta';
+        var r, ultimoErro = null;
+        for (var tent = 1; tent <= 2; tent++) {
+          try {
+            if (st) st.textContent = 'Consultando itens… (tentativa ' + tent + '/2)';
+            r = await fetch(alvo, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chave: ch }),
+            });
+            ultimoErro = null;
+            break;
+          } catch (e) {
+            ultimoErro = e;
+            await new Promise(function (res) { setTimeout(res, 600 * tent); });
+          }
+        }
+        if (ultimoErro) {
+          fallbackNFe(card, ch, PROXY_URL
+            ? ('Nao consegui falar com o backend (' + (ultimoErro.message || ultimoErro) + '). Tente de novo.')
+            : ('O consultadanfe.com bloqueia chamadas diretas do navegador (CORS: "Origem nao autorizada"). ' +
+               'No app final essa consulta roda no backend, sem CORS. Por ora, use o MeuDanfe abaixo.'));
+          return;
+        }
         try {
-          var r = await fetch('https://consultadanfe.com/api/v1/consulta', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chave: ch }),
-          });
           var data = await r.json().catch(function () { return {}; });
           if (!r.ok || !data.xml_base64) {
             var cod = (data && data.error) || ('HTTP ' + r.status);
@@ -383,7 +430,7 @@
           var doc = new DOMParser().parseFromString(xml, 'application/xml');
           renderNFe(card, doc);
         } catch (e) {
-          fallbackNFe(card, ch, 'Erro ao consultar itens: ' + (e && e.message ? e.message : e));
+          fallbackNFe(card, ch, 'Erro ao processar a resposta: ' + (e && e.message ? e.message : e));
         }
       }
       function renderNFe(card, doc) {
