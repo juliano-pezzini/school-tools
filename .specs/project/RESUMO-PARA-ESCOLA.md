@@ -86,9 +86,12 @@ Com o resultado desse teste sabemos o que é permitido, sem depender da TI.
    valor total** (sem detalhar os itens).
 
 ### D) Banco de Horas
-1. Como funciona hoje a regra de horas extras/compensação (quem aprova, limites,
-   prazos)?
-2. A ferramenta será usada mais no **celular** ou no **computador**?
+1. ✅ **Já confirmado:** **não há muitas regras** — a **diretora aprova** as horas
+   extras/compensações e é **ela mesma quem lança**; **não existem limites**. Porém é
+   **obrigatório rastrear o vínculo** entre cada **hora extra** e a **compensação**
+   correspondente (saber qual compensação quitou qual hora extra).
+2. ✅ **Já confirmado:** os **professores** vão usar mais no **celular**, para
+   **consultar seus saldos e extratos** de horas.
 
 ---
 
@@ -114,6 +117,8 @@ Para concluir a validação técnica, precisaremos, em algum momento, de:
 
 ## 7. Próximo passo sugerido
 
-Levar as perguntas da **Seção 4** para a equipe (bibliotecária, tesoureiro/APP e a
-diretora, que faz o teste de permissões). Com as respostas, fechamos o planejamento
-e começamos a construir.
+Faltam apenas **dois pontos** em aberto na Seção 4:
+- **A) Biblioteca** — descobrir qual sistema a escola usa (com a bibliotecária).
+- **B) Permissões** — a **diretora** rodar o teste prático com a conta da escola.
+
+Com essas duas respostas, fechamos o planejamento e começamos a construir.

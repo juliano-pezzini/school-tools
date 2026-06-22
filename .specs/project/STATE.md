@@ -153,8 +153,8 @@
   - [ ] Geração de relatórios (mensal/anual).
   - [ ] Gráficos e insights.
   - [ ] Autorização por papéis (admin/tesoureiro/leitor) integrada ao SSO Google.
-- [ ] M0: Confirmar form factor do app de banco de horas (PWA responsivo vs. outro) com SSO Google.
-- [ ] M0 (🔴 Governança/B-004): confirmar com admin de TI as permissões do tenant (deploy web app, Apps Script API, OAuth, Shared Drives, compartilhamento externo).
+- [x] M0: Confirmar form factor do app de banco de horas (PWA responsivo vs. outro) com SSO Google. → CONFIRMADO (2026-06-21): professores usam **mais no celular** para **consultar saldos/extratos** → PWA responsivo mobile-first. Regras (cliente): **diretora aprova e lança**, **sem limites**; **obrigatório rastrear o vínculo hora extra ↔ compensação** (qual compensação quitou qual hora extra).
+- [ ] M0 (🔴 Governança/B-004): a **diretora** roda um **teste prático** com a conta `@ensinablumenau` (publicar web app de teste + compartilhar arquivo externo) para confirmar permissões do tenant, em vez de abrir chamado com a TI da Prefeitura.
 - [ ] M0 (🔴 Scanner/B-005): validar câmera no iframe do HtmlService + libs externas sob CSP; senão, página de scanner à parte.
 - [ ] M0: integridade de dados em Sheets (LockService/concorrência, auditoria append-only, backup/restore).
 - [ ] M0: isolamento server-side de privacidade (funcionário vê só o próprio saldo) e papéis enforced no servidor.
