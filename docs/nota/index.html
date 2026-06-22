@@ -68,8 +68,11 @@
 
     <button id="denovo" class="sec" hidden>Escanear outro</button>
 
+    <p id="versao" style="text-align:center;color:#aaa;font-size:0.75rem;margin-top:18px"></p>
+
     <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
     <script>
+      var VERSAO = '2026-06-21 v6 (consultadanfe + zoom)';
       var FORMATOS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'itf', 'qr_code'];
       var UF = {
         11:'RO',12:'AC',13:'AM',14:'RR',15:'PA',16:'AP',17:'TO',21:'MA',22:'PI',23:'CE',
@@ -409,6 +412,7 @@
       document.getElementById('zoomMenos').onclick = function () { aplicarZoom(zoomAtual - passoZoom()); };
       video.addEventListener('click', focarNoToque);
 
+      document.getElementById('versao').textContent = 'versao: ' + VERSAO;
       iniciar();
     </script>
   </body>
