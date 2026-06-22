@@ -75,10 +75,10 @@ preparar um passo a passo simples (poucos cliques) para ela:
 Com o resultado desse teste sabemos o que é permitido, sem depender da TI.
 
 ### C) Fluxo de Caixa — acesso dos pais/associação
-1. Os **pais/membros da APP** vão precisar **acessar** a ferramenta (por exemplo,
-   para ver prestação de contas)? Ou basta o **tesoureiro/equipe** com conta da
-   escola? (Quem não tem conta `@ensinablumenau` não consegue login direto — nesse
-   caso a transparência sairia por um **PDF/relatório** exportado.)
+1. ✅ **Já confirmado:** os **pais/membros da APP** (sem conta `@ensinablumenau`)
+   **vão precisar consultar os relatórios** (prestação de contas). Como eles não têm
+   login do domínio, a transparência será por um **relatório de leitura pública**
+   (página/PDF acessível por link, sem necessidade de login).
 2. As despesas costumam ser lançadas **dentro do mês** em que a nota foi emitida?
    (Isso importa: o caminho **gratuito** de NFe funciona para notas **do mês
    corrente**. Notas antigas exigiriam um serviço pago de centavos por consulta.)

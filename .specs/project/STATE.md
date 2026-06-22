@@ -116,9 +116,9 @@
 ### B-006: Acesso externo da associação (APP) vs. premissa SSO-only
 
 **Discovered:** 2026-06-20
+**Status:** ✅ RESOLVIDO (2026-06-21)
 **Impact:** O Fluxo de Caixa é da associação de pais e mestres; membros/pais podem não ter conta `@ensinablumenau`. Se precisarem de acesso (transparência/leitura), conflita com AD-004 (SSO-only).
-**Workaround:** Limitar v1 ao tesoureiro/staff com conta do domínio; transparência via relatório PDF exportado.
-**Resolution:** Esclarecer a necessidade de acesso externo com o cliente.
+**Resolution (cliente confirmou 2026-06-21):** os **pais/membros da APP (sem conta do domínio) PRECISAM consultar os relatórios** (prestação de contas). Portanto a transparência será por **relatório de leitura pública** — página/PDF acessível por link, **sem login**. Escrita/lançamento continua SSO-only (tesoureiro/staff); leitura dos relatórios é pública. Isso exige que a plataforma sirva um endpoint/arquivo público de leitura (compatível com Apps Script Web App "qualquer pessoa" ou PDF no Drive com link público).
 
 ---
 
@@ -159,7 +159,7 @@
 - [ ] M0: integridade de dados em Sheets (LockService/concorrência, auditoria append-only, backup/restore).
 - [ ] M0: isolamento server-side de privacidade (funcionário vê só o próprio saldo) e papéis enforced no servidor.
 - [ ] M0: storage no Drive (Shared Drive, titularidade, evitar link público) + upload de foto do celular.
-- [ ] B-006: esclarecer com o cliente a necessidade de acesso externo da associação (pais sem conta do domínio).
+- [x] B-006: esclarecer com o cliente a necessidade de acesso externo da associação (pais sem conta do domínio). → CONFIRMADO: pais precisam consultar relatórios → leitura pública sem login.
 
 ---
 
