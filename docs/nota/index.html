@@ -72,13 +72,13 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
     <script>
-      var VERSAO = '2026-06-21 v10 (proxy via GET ?chave)';
-      // Quando houver backend (Apps Script doPost), coloque a URL /exec aqui,
-      // ou passe na URL da pagina: ?proxy=https://script.google.com/.../exec
-      // Vazio = tenta chamada direta (bloqueada pelo CORS do consultadanfe a partir do github.io).
+      var VERSAO = '2026-06-21 v11 (proxy backend fixo + validado)';
+      // Backend (Apps Script doGet ?chave) que consulta o consultadanfe sem CORS.
+      // Pode sobrescrever na URL: ?proxy=https://script.google.com/.../exec
+      var PROXY_PADRAO = 'https://script.google.com/macros/s/AKfycbyTh-HYAiSLVhDV633FE7gGrB6pXjC8MsktztvSG09ZtvWV7_ieBHQ6DCxcl3dWvpIgsQ/exec';
       var PROXY_URL = (function () {
-        try { return new URLSearchParams(location.search).get('proxy') || ''; }
-        catch (e) { return ''; }
+        try { return new URLSearchParams(location.search).get('proxy') || PROXY_PADRAO; }
+        catch (e) { return PROXY_PADRAO; }
       })();
       var FORMATOS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'itf', 'qr_code'];
       var UF = {
