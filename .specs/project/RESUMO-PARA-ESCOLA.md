@@ -44,6 +44,13 @@ construir as ferramentas.
     **itens e valor, sem captcha**.
 - ✅ **Nome do fornecedor** vem automático a partir do CNPJ (serviço gratuito).
 
+**Links para experimentar (testes ao vivo, abrir no celular):**
+- 📚 **Scanner de livros (ISBN):** https://juliano-pezzini.github.io/school-tools/scanner/
+- 🧾 **Leitor de notas/cupons fiscais:** https://juliano-pezzini.github.io/school-tools/nota/
+
+> São páginas de teste (protótipos) para demonstrar que a leitura funciona — ainda
+> não são as ferramentas finais.
+
 ---
 
 ## 4. ⭐ O que precisamos que a escola confirme
