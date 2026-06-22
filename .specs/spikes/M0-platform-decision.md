@@ -138,6 +138,8 @@ Itens descobertos na revisão completa da spec. Prioridade: 🔴 pode invalidar 
 
 **Conclusão (2026-06-21):** não há fonte **grátis + sem login + automatizável** de itens de NFe além do consultadanfe (mês corrente). SEFAZ direto (nacional, SC-NFe, SVRS) é sempre **captcha/login**. Para notas antigas ou NFC-e com itens automáticos, o upgrade natural é **Infosimples** (pago, centavos/consulta, mais completo, backend). Stack grátis confirmada: **consultadanfe (NFe mês) + link SEFAZ-SC (NFC-e) + BrasilAPI (fornecedor) + manual**.
 
+**Janela de lançamento confirmada pelo cliente (2026-06-21):** as despesas **costumam ser lançadas nos primeiros dias do mês seguinte** ao da nota → caem **dentro da janela** do consultadanfe (mês corrente + mês anterior até o dia 15). ✅ **Plano B (acordado) quando a busca automática falhar** (nota fora da janela / `nao_encontrada` / NFC-e sem scraping): a ferramenta mostra **fornecedor + data** (via chave decodificada offline + BrasilAPI) e pede **digitação manual do valor total**, **sem itens**. Evita dependência de serviço pago na v1.
+
 ### G. Robô da Biblioteca (detalha B-002)
 - 🟡 **Pergamum central identificado** (`pergamum.blumenau.sc.gov.br`, SPA, internet pública), mas o filtro de unidades **não lista escolas** → a biblioteca da **escola usa outro sistema** (a confirmar). Central serve só de referência.
 - 🔴 **Identificar o sistema da escola** (nome/URL ou ícone do programa) direto com a bibliotecária + print da tela de cadastro.

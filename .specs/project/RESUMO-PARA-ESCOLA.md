@@ -79,9 +79,11 @@ Com o resultado desse teste sabemos o que é permitido, sem depender da TI.
    **vão precisar consultar os relatórios** (prestação de contas). Como eles não têm
    login do domínio, a transparência será por um **relatório de leitura pública**
    (página/PDF acessível por link, sem necessidade de login).
-2. As despesas costumam ser lançadas **dentro do mês** em que a nota foi emitida?
-   (Isso importa: o caminho **gratuito** de NFe funciona para notas **do mês
-   corrente**. Notas antigas exigiriam um serviço pago de centavos por consulta.)
+2. ✅ **Já confirmado:** as despesas **costumam ser lançadas nos primeiros dias do
+   mês seguinte** ao da nota — ou seja, **dentro da janela** que o serviço gratuito
+   cobre (mês corrente, e o mês anterior até o dia 15). **Plano B** para os casos que
+   não funcionarem: a ferramenta mostra **fornecedor e data** e pede a **digitação do
+   valor total** (sem detalhar os itens).
 
 ### D) Banco de Horas
 1. Como funciona hoje a regra de horas extras/compensação (quem aprova, limites,
