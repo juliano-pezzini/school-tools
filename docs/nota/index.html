@@ -72,7 +72,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
     <script>
-      var VERSAO = '2026-06-21 v6 (consultadanfe + zoom)';
+      var VERSAO = '2026-06-21 v7 (fornecedor NFe do XML)';
       var FORMATOS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'itf', 'qr_code'];
       var UF = {
         11:'RO',12:'AC',13:'AM',14:'RR',15:'PA',16:'AP',17:'TO',21:'MA',22:'PI',23:'CE',
@@ -294,9 +294,15 @@
 
         out.innerHTML = html;
 
-        if (p.modelo === '55') consultarNFe(ch);
+        if (p.modelo === '55') {
+          // NFe: o XML do consultadanfe ja traz o emitente — preenche o card 2 a partir dele.
+          document.getElementById('cardCnpj').innerHTML =
+            '<h2>2. Fornecedor</h2><div class="muted">obtendo do XML da nota…</div>';
+          consultarNFe(ch);
+          return;
+        }
 
-        // chamada BrasilAPI (CORS liberado)
+        // NFC-e (e demais): fornecedor via BrasilAPI (nao temos o XML aqui).
         try {
           var r = await fetch('https://brasilapi.com.br/api/cnpj/v1/' + p.cnpj);
           var card = document.getElementById('cardCnpj');
@@ -309,7 +315,7 @@
               linha('Situação', d.descricao_situacao_cadastral) +
               linha('CNAE', d.cnae_fiscal_descricao);
           } else {
-            card.innerHTML = '<h2>2. Fornecedor (BrasilAPI)</h2><div class="err status">HTTP ' + r.status + ' — não encontrado.</div>';
+            card.innerHTML = '<h2>2. Fornecedor (BrasilAPI)</h2><div class="err status">HTTP ' + r.status + ' — não encontrado (CNPJ pode não estar na base).</div>';
           }
         } catch (e) {
           document.getElementById('cardCnpj').innerHTML =
@@ -353,6 +359,9 @@
           '<div class="muted">' + escapeHtml(motivo) + '</div>' +
           '<button id="btnDanfe" class="sec">Copiar chave e abrir MeuDanfe</button>';
         ligarBtnDanfe(ch);
+        var cc = document.getElementById('cardCnpj');
+        if (cc) cc.innerHTML = '<h2>2. Fornecedor</h2>' +
+          '<div class="muted">Emitente vem do XML da nota; como a consulta acima falhou, nao foi possivel obter agora.</div>';
       }
       async function consultarNFe(ch) {
         var card = document.getElementById('cardNFe');
@@ -381,6 +390,19 @@
         var total = txt(doc, 'vNF');
         var emit = doc.getElementsByTagName('emit')[0];
         var fornec = emit ? txt(emit, 'xNome') : '';
+        // Card 2: fornecedor a partir do XML (emit).
+        var cc = document.getElementById('cardCnpj');
+        if (cc && emit) {
+          var ender = emit.getElementsByTagName('enderEmit')[0];
+          var mun = ender ? txt(ender, 'xMun') : '';
+          var ufE = ender ? txt(ender, 'UF') : '';
+          var cnpjE = txt(emit, 'CNPJ');
+          cc.innerHTML = '<h2>2. Fornecedor (do XML)</h2>' +
+            linha('Razão social', txt(emit, 'xNome')) +
+            linha('Nome fantasia', txt(emit, 'xFant')) +
+            linha('CNPJ', cnpjE ? fmtCNPJ(cnpjE) : '') +
+            linha('Município/UF', mun + (ufE ? '/' + ufE : ''));
+        }
         var dets = doc.getElementsByTagName('det');
         var rows = '';
         for (var i = 0; i < dets.length; i++) {
