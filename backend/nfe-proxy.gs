@@ -14,11 +14,20 @@
  *   3. Copie a URL /exec e abra a pagina de teste assim:
  *      https://juliano-pezzini.github.io/school-tools/nota/?proxy=<URL_/exec>
  *
- * Observacao: o front envia o corpo como text/plain (requisicao "simples")
- * para evitar o preflight CORS, que o Apps Script nao trata.
+ * Observacao: o front chama via GET (?chave=...) quando aponta para este proxy,
+ * evitando preflight CORS e o problema de redirect de POST do Apps Script.
  */
 
 var CONSULTADANFE_URL = 'https://consultadanfe.com/api/v1/consulta';
+
+function doGet(e) {
+  var chave = (e && e.parameter && e.parameter.chave)
+    ? String(e.parameter.chave).replace(/\D/g, '') : '';
+  if (!chave) {
+    return _json({ status: 'ok', message: 'Proxy NFe ativo. Use ?chave=<44 digitos>.' });
+  }
+  return _consultar(chave);
+}
 
 function doPost(e) {
   var chave = '';
@@ -28,11 +37,13 @@ function doPost(e) {
   } catch (err) {
     return _json({ status: 'erro', error: 'body_invalido', message: String(err) });
   }
+  return _consultar(chave);
+}
 
+function _consultar(chave) {
   if (!/^\d{44}$/.test(chave)) {
     return _json({ status: 'erro', error: 'chave_invalida', message: 'Chave precisa ter 44 digitos.' });
   }
-
   try {
     var resp = UrlFetchApp.fetch(CONSULTADANFE_URL, {
       method: 'post',
@@ -46,11 +57,6 @@ function doPost(e) {
   } catch (err) {
     return _json({ status: 'erro', error: 'falha_backend', message: String(err) });
   }
-}
-
-// Permite um GET rapido pra checar se o deploy esta no ar.
-function doGet() {
-  return _json({ status: 'ok', message: 'Proxy NFe ativo. Use POST com {chave}.' });
 }
 
 function _json(obj) {
