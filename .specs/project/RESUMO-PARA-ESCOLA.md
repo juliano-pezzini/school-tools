@@ -62,13 +62,17 @@ sistema**. Precisamos saber:
 3. O sistema permite **importar o livro pelo ISBN** (puxa título/autor/capa sozinho)
    ou a bibliotecária digita tudo à mão?
 
-### B) Equipe de TI da Prefeitura — permissões da conta Google
-A ferramenta depende de algumas permissões no Google Workspace da escola. Precisamos
-que o **administrador de TI** confirme se é permitido:
-1. Publicar um "aplicativo web" feito no Google Apps Script;
-2. Usar a API do Apps Script (para automação de publicação);
-3. Permissões de login (OAuth) e Drives Compartilhados;
-4. Compartilhamento de arquivos com pessoas de fora do domínio.
+### B) Permissões da conta Google — um teste prático com a diretora
+A ferramenta depende de algumas permissões no Google Workspace da escola. Em vez de
+abrir um chamado com a TI da Prefeitura, é mais rápido a **diretora fazer um teste**
+com a conta da escola e nos dizer se funcionou ou se apareceu algum bloqueio. Vamos
+preparar um passo a passo simples (poucos cliques) para ela:
+1. Entrar no Google Apps Script com a conta `@ensinablumenau` e tentar **publicar um
+   "aplicativo web"** de teste — ver se conclui ou se aparece mensagem de bloqueio;
+2. Tentar **compartilhar um arquivo** do Drive da escola com um e-mail de fora do
+   domínio — ver se deixa ou se bloqueia.
+
+Com o resultado desse teste sabemos o que é permitido, sem depender da TI.
 
 ### C) Fluxo de Caixa — acesso dos pais/associação
 1. Os **pais/membros da APP** vão precisar **acessar** a ferramenta (por exemplo,
@@ -89,7 +93,8 @@ que o **administrador de TI** confirme se é permitido:
 ## 5. Pendências que dependem de acesso da escola
 
 Para concluir a validação técnica, precisaremos, em algum momento, de:
-- Uma **conta real `@ensinablumenau`** para testar login e permissões (item B acima).
+- A **diretora rodar o teste prático** de permissões com a conta `@ensinablumenau`
+  (item B acima).
 - Um **acesso/print do sistema da biblioteca** (item A acima).
 
 ---
@@ -107,6 +112,6 @@ Para concluir a validação técnica, precisaremos, em algum momento, de:
 
 ## 7. Próximo passo sugerido
 
-Levar as perguntas da **Seção 4** para a equipe (bibliotecária, tesoureiro/APP e TI
-da Prefeitura) e trazer as respostas. Com elas, fechamos o planejamento e começamos
-a construir.
+Levar as perguntas da **Seção 4** para a equipe (bibliotecária, tesoureiro/APP e a
+diretora, que faz o teste de permissões). Com as respostas, fechamos o planejamento
+e começamos a construir.
