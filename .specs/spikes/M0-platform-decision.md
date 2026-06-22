@@ -123,6 +123,21 @@ Itens descobertos na revisão completa da spec. Prioridade: 🔴 pode invalidar 
 - 🔴 **Riscos:** dependência de **terceiros** (MeuDanfe pode mudar/limitar/cobrar; checar **ToS**) e de **scraping SEFAZ** (anti-bot/mudança de página). Mitigar com cache, retries e fallback OCR/manual.
 - 🟡 **Testes pendentes (nota real):** (1) ~~link do QR da NFC-e abre itens sem captcha?~~ **✅ sim (só Cloudflare)**; (2) MeuDanfe retorna XML para uma chave de NFe (precisa cadastro + R$0,03 + backend); (3) taxa de leitura do scanner — **QR lido OK 1×; outro QR e o Code-128 da NFe falharam por foco/nitidez** → adicionados **zoom (−/+) e foco por toque** na página de teste (`docs/nota/`).
 
+**Esclarecimento do limite consultadanfe (2026-06-21, doc oficial `consultadanfe.com/api#limites`):** o "**10 documentos/mês**" é do **plano grátis da CONTA** (`app.consultadanfe.com`, painel com certificado/histórico) — **NÃO** se aplica à **API pública** `/api/v1/consulta` que usamos (sem cadastro, sem API-key, **60 req/min, sem limite diário**, mês corrente, só NFe 55). Termos: `consultadanfe.com/termos`. ⚠️ Por ser grátis/sem contrato, podem mudar regras — monitorar.
+
+**Matriz de fornecedores de consulta (pesquisa 2026-06-21):**
+| Fornecedor | Entrega | Grátis? | Acesso |
+|---|---|---|---|
+| **consultadanfe** (API pública) | XML completo (itens+valores) NFe 55, **mês corrente** | ✅ grátis, sem key | backend (CORS restrito) — **em uso** |
+| **Infosimples** (`/sefaz-nfe`) | **Mais completo**: emitente+**produtos**+totais+situação; cai p/ "resumida"; NFe **e** NFC-e, notas antigas, todas UFs | ❌ pago (só crédito de teste) | backend (token) — **melhor upgrade pago** |
+| **nfe.io** | Consulta NFe por API | ❌ comercial (free tier dev) | backend (key); página deu HTTP 403 |
+| **Focus NFe** (focusnfe.com.br) | Emitir **e** consultar NFe/NFCe/NFSe | ❌ comercial (sandbox grátis) | backend (token) |
+| **SVRS** (`dfe-portal...rs.gov.br`) | Oficial: Consulta Pública / Download XML | ✅ grátis, mas… | Consulta Pública = **captcha**; Download XML = **login gov.br/cert** → não automatizável |
+| **SEFAZ-SC NFe** (`tax.NET/...ConsultaPublicaNFe.aspx`) | Resumo NFe 55 | ✅ grátis, mas **captcha** (confirmado 2026-06-21) | não automatizável (WebForms+captcha) |
+| **SEFAZ-SC NFC-e** (`/nfce/consulta`) | Nota completa (itens+valor) NFC-e 65 | ✅ grátis, **sem captcha** (só Cloudflare) | navegador (não server-fetch puro) — **em uso** |
+
+**Conclusão (2026-06-21):** não há fonte **grátis + sem login + automatizável** de itens de NFe além do consultadanfe (mês corrente). SEFAZ direto (nacional, SC-NFe, SVRS) é sempre **captcha/login**. Para notas antigas ou NFC-e com itens automáticos, o upgrade natural é **Infosimples** (pago, centavos/consulta, mais completo, backend). Stack grátis confirmada: **consultadanfe (NFe mês) + link SEFAZ-SC (NFC-e) + BrasilAPI (fornecedor) + manual**.
+
 ### G. Robô da Biblioteca (detalha B-002)
 - 🟡 **Pergamum central identificado** (`pergamum.blumenau.sc.gov.br`, SPA, internet pública), mas o filtro de unidades **não lista escolas** → a biblioteca da **escola usa outro sistema** (a confirmar). Central serve só de referência.
 - 🔴 **Identificar o sistema da escola** (nome/URL ou ícone do programa) direto com a bibliotecária + print da tela de cadastro.
