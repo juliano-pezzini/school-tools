@@ -72,10 +72,14 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
     <script>
-      var VERSAO = '2026-06-21 v8 (valida DV + diagnostico CORS)';
-      // Quando houver backend (Apps Script doPost), coloque a URL /exec aqui.
+      var VERSAO = '2026-06-21 v9 (proxy configuravel via ?proxy=)';
+      // Quando houver backend (Apps Script doPost), coloque a URL /exec aqui,
+      // ou passe na URL da pagina: ?proxy=https://script.google.com/.../exec
       // Vazio = tenta chamada direta (bloqueada pelo CORS do consultadanfe a partir do github.io).
-      var PROXY_URL = '';
+      var PROXY_URL = (function () {
+        try { return new URLSearchParams(location.search).get('proxy') || ''; }
+        catch (e) { return ''; }
+      })();
       var FORMATOS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'itf', 'qr_code'];
       var UF = {
         11:'RO',12:'AC',13:'AM',14:'RR',15:'PA',16:'AP',17:'TO',21:'MA',22:'PI',23:'CE',
@@ -395,13 +399,15 @@
         if (!card) return;
         var st = document.getElementById('nfeStatus');
         var alvo = PROXY_URL || 'https://consultadanfe.com/api/v1/consulta';
+        // Proxy Apps Script: usar text/plain evita o preflight CORS (Apps Script nao responde OPTIONS).
+        var ctype = PROXY_URL ? 'text/plain;charset=utf-8' : 'application/json';
         var r, ultimoErro = null;
         for (var tent = 1; tent <= 2; tent++) {
           try {
             if (st) st.textContent = 'Consultando itens… (tentativa ' + tent + '/2)';
             r = await fetch(alvo, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': ctype },
               body: JSON.stringify({ chave: ch }),
             });
             ultimoErro = null;
