@@ -87,6 +87,7 @@
 ### B-003: Viabilidade da integração NFe/NFC-e incerta
 
 **Discovered:** 2026-06-20
+**Status:** ✅ **RESOLVIDO (2026-06-21).** Ambos os caminhos validados empiricamente com notas reais: **NFe (55)** → proxy backend (Apps Script + consultadanfe) renderiza itens+total na página; **NFC-e (65)** → link SEFAZ-SC abre itens+valor **sem captcha** (só desafio rápido do Cloudflare). Scanner lê QR (NFC-e) e Code-128 (NFe) no S24+. cDV validado offline. Caminho **sem certificado** confirmado para notas do **mês corrente** (limite do consultadanfe p/ NFe). Conclusão de capacidade: o desafio de integração NFe/NFC-e do AD-007 está coberto.
 **Impact:** Afeta a feature "Captura por NFe/NFC-e" do M1 — consulta à SEFAZ pode exigir certificado/captcha.
 **Workaround:** Permitir entrada manual da despesa como fallback.
 **Resolution:** Concluir o Spike NFe/NFC-e no M0.
@@ -147,7 +148,7 @@
 
 - [x] M0: Comparar stacks e registrar AD da plataforma — feito (matriz em `.specs/spikes/M0-platform-decision.md`, AD-007 provisório).
 - [ ] M0 (Spike de Capacidades): comprovar na stack provisória (Apps Script) cada desafio; falha → escalar a ferramenta para Supabase/Cloudflare:
-  - [ ] Integração NFe/NFC-e (parsing/consulta SEFAZ-SC).
+  - [x] Integração NFe/NFC-e (parsing/consulta SEFAZ-SC). — validado 2026-06-21 (NFe via proxy consultadanfe; NFC-e via link SEFAZ-SC sem captcha).
   - [ ] Leitura de QR/código de barras pela câmera (incl. ISBN).
   - [ ] Geração de relatórios (mensal/anual).
   - [ ] Gráficos e insights.
