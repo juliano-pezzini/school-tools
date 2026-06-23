@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <base target="_top" />
+    <meta charset="utf-8" />
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        padding: 16px;
+        background: #f4f6f8;
+        color: #1a1a1a;
+        max-width: 920px;
+        margin: 0 auto;
+      }
+      h1 { font-size: 1.25rem; margin: 0 0 4px; }
+      .muted { color: #666; font-size: 0.85rem; margin: 0 0 16px; }
+      .card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 14px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+      }
+      .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+      .field { display: flex; flex-direction: column; gap: 4px; }
+      .field label { font-size: 0.75rem; color: #666; text-transform: uppercase; letter-spacing: 0.04em; }
+      select, button {
+        padding: 10px 12px; font-size: 1rem; border-radius: 8px; border: 1px solid #cfd8dc;
+        background: #fff;
+      }
+      button {
+        border: 0; background: #1565c0; color: #fff; font-weight: 600; cursor: pointer;
+      }
+      button:active { background: #0d47a1; }
+      button.secondary { background: #455a64; }
+      .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+      .tabs button { flex: 1; background: #e3e8ec; color: #37474f; }
+      .tabs button.active { background: #1565c0; color: #fff; }
+      .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+      .kpi { background: #f4f6f8; border-radius: 10px; padding: 12px; text-align: center; }
+      .kpi .k { font-size: 0.72rem; color: #666; text-transform: uppercase; letter-spacing: 0.04em; }
+      .kpi .v { font-size: 1.2rem; font-weight: 700; margin-top: 4px; }
+      .pos { color: #137333; }
+      .neg { color: #c5221f; }
+      table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+      th, td { padding: 7px 8px; border-bottom: 1px solid #eceff1; text-align: left; }
+      th { font-size: 0.72rem; text-transform: uppercase; color: #666; letter-spacing: 0.03em; }
+      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+      .tag { font-size: 0.7rem; padding: 2px 7px; border-radius: 999px; font-weight: 600; }
+      .tag.entrada { background: #e6f4ea; color: #137333; }
+      .tag.saida { background: #fce8e6; color: #c5221f; }
+      ul.insights { margin: 0; padding-left: 18px; }
+      ul.insights li { margin-bottom: 6px; line-height: 1.35; }
+      .status { padding: 12px; border-radius: 8px; margin-top: 10px; font-weight: 600; font-size: 0.9rem; }
+      .ok { background: #e6f4ea; color: #137333; }
+      .err { background: #fce8e6; color: #c5221f; }
+      .info { background: #e8f0fe; color: #1967d2; }
+      .hidden { display: none; }
+      .chart-wrap { position: relative; height: 260px; }
+      a.pdf-link { display: inline-block; margin-top: 8px; color: #1565c0; font-weight: 600; word-break: break-all; }
+      h2 { font-size: 1rem; margin: 4px 0 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>Spike — Relatórios do Fluxo de Caixa</h1>
+    <p class="muted">
+      Prova de capacidade (Apps Script + Sheets/Drive): relatório mensal e anual,
+      gráficos, insights e exportação de PDF público. Dados são fictícios de exemplo.
+    </p>
+
+    <div class="card">
+      <div class="controls">
+        <div class="field">
+          <label for="year">Ano</label>
+          <select id="year"></select>
+        </div>
+        <div class="field" id="monthField">
+          <label for="month">Mês</label>
+          <select id="month"></select>
+        </div>
+      </div>
+      <div class="tabs" style="margin-top:14px;">
+        <button id="tabMonthly" class="active" onclick="showTab('monthly')">Relatório Mensal</button>
+        <button id="tabAnnual" onclick="showTab('annual')">Relatório Anual</button>
+      </div>
+      <div id="globalStatus"></div>
+    </div>
+
+    <!-- ====================== MONTHLY ====================== -->
+    <div id="monthlyView">
+      <div class="card">
+        <div class="kpis" id="monthlyKpis"></div>
+      </div>
+      <div class="card">
+        <h2>Entradas e saídas por categoria</h2>
+        <div class="chart-wrap"><canvas id="monthlyChart"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Lançamentos do mês</h2>
+        <table id="monthlyTable">
+          <thead>
+            <tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Descrição</th><th class="num">Valor</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ====================== ANNUAL ====================== -->
+    <div id="annualView" class="hidden">
+      <div class="card">
+        <div class="kpis" id="annualKpis"></div>
+      </div>
+      <div class="card">
+        <h2>Entradas × Saídas por mês</h2>
+        <div class="chart-wrap"><canvas id="annualBarChart"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Saldo acumulado ao longo do ano</h2>
+        <div class="chart-wrap"><canvas id="annualLineChart"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Distribuição das despesas</h2>
+        <div class="chart-wrap"><canvas id="annualDoughnut"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Destaques do ano (insights)</h2>
+        <ul class="insights" id="annualInsights"></ul>
+      </div>
+      <div class="card">
+        <h2>Exportar prestação de contas</h2>
+        <p class="muted" style="margin-top:0;">
+          Gera um PDF e cria um link de leitura pública (transparência para os pais sem conta do domínio).
+        </p>
+        <button id="pdfBtn" onclick="exportPdf()">Gerar PDF e link público</button>
+        <div id="pdfStatus"></div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+      var brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+      function fmt(v) { return brl.format(v || 0); }
+      function el(id) { return document.getElementById(id); }
+      function setStatus(id, msg, cls) {
+        var n = el(id);
+        n.innerHTML = msg ? '<div class="status ' + cls + '">' + msg + '</div>' : '';
+      }
+
+      var charts = {};
+      var chartJsOk = typeof Chart !== 'undefined';
+
+      // ---------- Bootstrap ----------
+      google.script.run
+        .withSuccessHandler(initYears)
+        .withFailureHandler(function (e) {
+          setStatus('globalStatus', 'Falha ao carregar dados: ' + e.message, 'err');
+        })
+        .getAvailableYears();
+
+      function initYears(years) {
+        if (!chartJsOk) {
+          setStatus('globalStatus',
+            'Aviso: Chart.js não carregou sob a CSP — gráficos podem não aparecer. Tabelas e PDF continuam funcionando.', 'info');
+        }
+        var ySel = el('year');
+        ySel.innerHTML = years.map(function (y) { return '<option>' + y + '</option>'; }).join('');
+        var mSel = el('month');
+        var names = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+        mSel.innerHTML = names.map(function (n, i) { return '<option value="' + (i + 1) + '">' + n + '</option>'; }).join('');
+        mSel.value = 6;
+        ySel.onchange = refresh;
+        mSel.onchange = refresh;
+        refresh();
+      }
+
+      var currentTab = 'monthly';
+      function showTab(tab) {
+        currentTab = tab;
+        el('tabMonthly').classList.toggle('active', tab === 'monthly');
+        el('tabAnnual').classList.toggle('active', tab === 'annual');
+        el('monthlyView').classList.toggle('hidden', tab !== 'monthly');
+        el('annualView').classList.toggle('hidden', tab !== 'annual');
+        el('monthField').style.visibility = (tab === 'monthly') ? 'visible' : 'hidden';
+        refresh();
+      }
+
+      function refresh() {
+        if (currentTab === 'monthly') loadMonthly();
+        else loadAnnual();
+      }
+
+      // ---------- Monthly ----------
+      function loadMonthly() {
+        var y = el('year').value, m = el('month').value;
+        google.script.run
+          .withSuccessHandler(renderMonthly)
+          .withFailureHandler(function (e) { setStatus('globalStatus', e.message, 'err'); })
+          .getMonthlyReport(y, m);
+      }
+
+      function renderMonthly(r) {
+        setStatus('globalStatus', '');
+        el('monthlyKpis').innerHTML =
+          kpi('Entradas', fmt(r.income), 'pos') +
+          kpi('Saídas', fmt(r.expense), 'neg') +
+          kpi('Saldo do mês', fmt(r.balance), r.balance < 0 ? 'neg' : 'pos') +
+          kpi('Acumulado', fmt(r.accumulatedBalance), r.accumulatedBalance < 0 ? 'neg' : 'pos');
+
+        var tbody = el('monthlyTable').querySelector('tbody');
+        if (!r.lines.length) {
+          tbody.innerHTML = '<tr><td colspan="5" class="muted">Sem lançamentos neste mês.</td></tr>';
+        } else {
+          tbody.innerHTML = r.lines.map(function (l) {
+            return '<tr><td>' + l.date + '</td>' +
+              '<td><span class="tag ' + l.type + '">' + (l.type === 'entrada' ? 'Entrada' : 'Saída') + '</span></td>' +
+              '<td>' + l.category + '</td><td>' + l.description + '</td>' +
+              '<td class="num">' + fmt(l.value) + '</td></tr>';
+          }).join('');
+        }
+
+        if (!chartJsOk) return;
+        var cats = {};
+        r.byCategoryIncome.forEach(function (p) { cats[p.key] = cats[p.key] || [0, 0]; cats[p.key][0] = p.value; });
+        r.byCategoryExpense.forEach(function (p) { cats[p.key] = cats[p.key] || [0, 0]; cats[p.key][1] = p.value; });
+        var labels = Object.keys(cats);
+        drawChart('monthlyChart', {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [
+              { label: 'Entradas', data: labels.map(function (k) { return cats[k][0]; }), backgroundColor: '#34a853' },
+              { label: 'Saídas', data: labels.map(function (k) { return cats[k][1]; }), backgroundColor: '#ea4335' }
+            ]
+          },
+          options: baseOptions()
+        });
+      }
+
+      // ---------- Annual ----------
+      function loadAnnual() {
+        var y = el('year').value;
+        google.script.run
+          .withSuccessHandler(renderAnnual)
+          .withFailureHandler(function (e) { setStatus('globalStatus', e.message, 'err'); })
+          .getAnnualReport(y);
+      }
+
+      function renderAnnual(r) {
+        setStatus('globalStatus', '');
+        el('annualKpis').innerHTML =
+          kpi('Entradas no ano', fmt(r.totalIncome), 'pos') +
+          kpi('Saídas no ano', fmt(r.totalExpense), 'neg') +
+          kpi('Resultado', fmt(r.yearBalance), r.yearBalance < 0 ? 'neg' : 'pos');
+
+        el('annualInsights').innerHTML = r.insights.map(function (s) {
+          return '<li>' + s + '</li>';
+        }).join('');
+
+        if (!chartJsOk) return;
+        drawChart('annualBarChart', {
+          type: 'bar',
+          data: {
+            labels: r.months,
+            datasets: [
+              { label: 'Entradas', data: r.monthlyIncome, backgroundColor: '#34a853' },
+              { label: 'Saídas', data: r.monthlyExpense, backgroundColor: '#ea4335' }
+            ]
+          },
+          options: baseOptions()
+        });
+
+        drawChart('annualLineChart', {
+          type: 'line',
+          data: {
+            labels: r.months,
+            datasets: [{
+              label: 'Saldo acumulado', data: r.accumulated,
+              borderColor: '#1565c0', backgroundColor: 'rgba(21,101,192,0.12)',
+              fill: true, tension: 0.25
+            }]
+          },
+          options: baseOptions()
+        });
+
+        drawChart('annualDoughnut', {
+          type: 'doughnut',
+          data: {
+            labels: r.byCategoryExpense.map(function (p) { return p.key; }),
+            datasets: [{
+              data: r.byCategoryExpense.map(function (p) { return p.value; }),
+              backgroundColor: ['#ea4335', '#fbbc04', '#9334e6', '#1565c0', '#34a853', '#ff6d00', '#00897b']
+            }]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'right' },
+              tooltip: { callbacks: { label: function (c) { return c.label + ': ' + fmt(c.parsed); } } } }
+          }
+        });
+      }
+
+      function exportPdf() {
+        var y = el('year').value;
+        el('pdfBtn').disabled = true;
+        setStatus('pdfStatus', 'Gerando PDF…', 'info');
+        google.script.run
+          .withSuccessHandler(function (res) {
+            el('pdfBtn').disabled = false;
+            setStatus('pdfStatus',
+              'PDF criado e compartilhado por link de leitura: <a class="pdf-link" href="' +
+              res.url + '" target="_blank" rel="noopener">' + res.name + '</a>', 'ok');
+          })
+          .withFailureHandler(function (e) {
+            el('pdfBtn').disabled = false;
+            setStatus('pdfStatus', 'Falha ao gerar PDF: ' + e.message, 'err');
+          })
+          .exportAnnualPdf(y);
+      }
+
+      // ---------- chart helpers ----------
+      function baseOptions() {
+        return {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top' },
+            tooltip: { callbacks: { label: function (c) { return c.dataset.label + ': ' + fmt(c.parsed.y); } } }
+          },
+          scales: { y: { ticks: { callback: function (v) { return fmt(v); } } } }
+        };
+      }
+      function drawChart(id, cfg) {
+        if (charts[id]) charts[id].destroy();
+        charts[id] = new Chart(el(id).getContext('2d'), cfg);
+      }
+      function kpi(label, value, cls) {
+        return '<div class="kpi"><div class="k">' + label + '</div><div class="v ' + cls + '">' + value + '</div></div>';
+      }
+    </script>
+  </body>
+</html>

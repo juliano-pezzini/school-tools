@@ -17,14 +17,13 @@
 - Matriz de decisão em `.specs/spikes/M0-platform-decision.md` → stack provisória **Pure Google (Apps Script + Sheets/Drive) + Playwright** (AD-007).
 - Sujeita à comprovação pelos spikes de capacidade abaixo.
 
-**Spike de Capacidades da Stack** - PLANNED
+**Spike de Capacidades da Stack** - COMPLETE
 
-- Comprovar que a stack provisória comporta cada desafio técnico (do contrário, escalar a ferramenta para Supabase/Cloudflare):
-  - Integração NFe/NFC-e (parsing/consulta).
-  - Leitura de QR/código de barras (incl. ISBN) pela câmera.
-  - Geração de relatórios (mensal/anual).
-  - Gráficos e insights.
-  - Controle de autorização por papéis (admin/tesoureiro/leitor) integrado ao SSO Google.
+- Comprovado que a stack provisória comporta cada desafio técnico (nenhum precisou escalar para Supabase/Cloudflare):
+  - ✅ Integração NFe/NFC-e (parsing/consulta) — validado 2026-06-21.
+  - ✅ Leitura de QR/código de barras (incl. ISBN) pela câmera — validado 2026-06-20 (B-005).
+  - 🛠️ Geração de relatórios (mensal/anual) + gráficos e insights — ✅ **VALIDADO (2026-06-22)**: `spikes/m0-reports/` implantado e testado (Chart.js sob CSP, PDF HTML→Blob com SVG server-side, link público do Drive, pt-BR).
+  - ✅ Controle de autorização por papéis (admin/tesoureiro/leitor/funcionário) + isolamento server-side, integrado ao SSO Google — **VALIDADO (2026-06-22)**: `spikes/m0-roles/` implantado e testado (guard server-side, isolamento por linha, painel de "ataque" barrado, bootstrap anti-lockout; harness Node com 35 checks).
   - (Catálogo detalhado de riscos em `.specs/spikes/M0-platform-decision.md` → "Desafios técnicos adicionais a comprovar".)
 
 **Spike de Governança do Workspace (admin)** - PLANNED

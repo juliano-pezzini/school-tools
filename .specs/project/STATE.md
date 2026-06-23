@@ -1,7 +1,7 @@
 # State
 
-**Last Updated:** 2026-06-20
-**Current Work:** M0 — Spike de Capacidades da Stack (validar stack provisória AD-007 contra os desafios técnicos)
+**Last Updated:** 2026-06-22
+**Current Work:** M0 — Spikes de capacidade da stack **CONCLUÍDOS** (NFe/NFC-e, scanner/ISBN, relatórios+gráficos, papéis+isolamento todos validados em deploy). Bloqueio restante para fechar o M0 técnico: **Governança do tenant (B-004)** — depende da diretora rodar o Hello World em `@ensinablumenau`.
 
 ---
 
@@ -127,6 +127,9 @@
 - **HtmlService bloqueia `getUserMedia`:** o iframe do Apps Script não delega `allow="camera"`, então scanner de vídeo ao vivo falha com `NotAllowedError` (sem prompt). Solução: `<input type="file" accept="image/*" capture="environment">` abre a câmera nativa e funciona; decodificar o código da foto client-side (ex.: ZXing). Confirmado empiricamente em 2026-06-20.
 - **Conta pessoal de-risca parte do M0:** motor do Apps Script/HtmlService é idêntico ao Workspace — reproduz fielmente câmera/CSP/capacidades. **Não** reproduz: governança do admin (B-004), SSO por domínio e Shared Drives (são tenant-only).
 - **Scanner ao vivo confiável (validado S24+):** abrir o stream manualmente (não via lib), preferir `BarcodeDetector` nativo ao ZXing, e exigir 2 leituras idênticas antes de aceitar. `decodeFromConstraints` do ZXing tira o controle do track (lanterna/foco não pegam) e gera falsos positivos em código borrado. Capability `torch` no Samsung pode demorar a aparecer — usar retries + fallback.
+- **Relatórios/gráficos viáveis no Apps Script (validado 2026-06-22):** Chart.js (CDN jsdelivr) **carrega sob a CSP do HtmlService** — barras/linha/rosca renderizam na tela. Para o **PDF** o conversor `Utilities.newBlob(html).getAs('application/pdf')` **não executa JS** → usar **SVG gerado no servidor** (Chart.js só vale para a tela). Link de leitura pública via `DriveApp.Access.ANYONE_WITH_LINK + Permission.VIEW` cobre a transparência da APP (B-006). Formatação pt-BR: `Intl` no cliente, helper manual no servidor.
+- **Autorização server-side no Apps Script (padrão validado em lógica 2026-06-22):** usar `executeAs USER_DEPLOYING` para o script ter acesso à base e **filtrar** server-side (o visitante não toca na planilha); identidade do visitante via `Session.getActiveUser().getEmail()` (confiável no mesmo domínio). Toda função privilegiada começa com um guard `requireRole_([...])` — esconder botão na UI é só cosmético. Isolamento por linha = filtrar pelas linhas do e-mail efetivo. Para testar vários papéis numa conta só: "ver como" gated por admin (saída usa identidade real). Incluir trava do último admin (anti-lockout) e sanitização na fronteira.
+- **`getActiveUser().getEmail()` pode vir VAZIO na 1ª execução (gotcha, 2026-06-22):** em conta pessoal, durante o fluxo de autorização inicial o `getActiveUser` retornou vazio — se o seed do admin depende disso, a base nasce **sem admin** (usuário fica `desconhecido`). Mitigação aplicada no spike `m0-roles`: **bootstrap anti-lockout** — se não existe nenhum admin e o usuário real é conhecido pelo SSO, ele é promovido a admin ao abrir a sessão (basta recarregar). Não depender do `getActiveUser` no exato momento da criação da base.
 
 ---
 
@@ -149,9 +152,10 @@
 - [x] M0: Comparar stacks e registrar AD da plataforma — feito (matriz em `.specs/spikes/M0-platform-decision.md`, AD-007 provisório).
 - [ ] M0 (Spike de Capacidades): comprovar na stack provisória (Apps Script) cada desafio; falha → escalar a ferramenta para Supabase/Cloudflare:
   - [x] Integração NFe/NFC-e (parsing/consulta SEFAZ-SC). — validado 2026-06-21 (NFe via proxy consultadanfe; NFC-e via link SEFAZ-SC sem captcha).
-  - [ ] Leitura de QR/código de barras pela câmera (incl. ISBN).
-  - [ ] Geração de relatórios (mensal/anual).
-  - [ ] Gráficos e insights.
+  - [x] Leitura de QR/código de barras pela câmera (incl. ISBN). — validado 2026-06-20 (B-005, scanner ao vivo S24+).
+  - [x] Geração de relatórios (mensal/anual). — **VALIDADO (2026-06-22)**: spike `spikes/m0-reports/` implantado e testado no deploy (todos os checks passaram): agregação consistente (Σ mensal == anual, acumulado == saldo do ano), pt-BR (R$/dd-mm-aaaa), Sheets real, conversão HTML→PDF e link público do Drive.
+  - [x] Gráficos e insights. — **VALIDADO (2026-06-22)** no mesmo spike `m0-reports`: Chart.js carrega sob a CSP do HtmlService (barras/linha/rosca na tela), SVG server-side no PDF, insights anuais automáticos.
+  - [x] Autorização por papéis (admin/tesoureiro/leitor/funcionário) integrada ao SSO Google. — **VALIDADO (2026-06-22)**: spike `spikes/m0-roles/` implantado e testado no deploy (todos os checks passaram — papel desconhecido corrigido via bootstrap anti-lockout). Papéis enforçados server-side (`requireRole_`), **isolamento por linha** (funcionário vê só o próprio saldo), painel de "ataque" confirma que chamar a função direto também é barrado. Modelo: `executeAs USER_DEPLOYING` + `Session.getActiveUser` como âncora.
   - [ ] Autorização por papéis (admin/tesoureiro/leitor) integrada ao SSO Google.
 - [x] M0: Confirmar form factor do app de banco de horas (PWA responsivo vs. outro) com SSO Google. → CONFIRMADO (2026-06-21): professores usam **mais no celular** para **consultar saldos/extratos** → PWA responsivo mobile-first. Regras (cliente): **diretora aprova e lança**, **sem limites**; **obrigatório rastrear o vínculo hora extra ↔ compensação** (qual compensação quitou qual hora extra).
 - [ ] M0 (🔴 Governança/B-004): a **diretora** roda um **teste prático** com a conta `@ensinablumenau` (publicar web app de teste + compartilhar arquivo externo) para confirmar permissões do tenant, em vez de abrir chamado com a TI da Prefeitura.
