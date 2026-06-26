@@ -26,9 +26,10 @@
   - ✅ Controle de autorização por papéis (admin/tesoureiro/leitor/funcionário) + isolamento server-side, integrado ao SSO Google — **VALIDADO (2026-06-22)**: `spikes/m0-roles/` implantado e testado (guard server-side, isolamento por linha, painel de "ataque" barrado, bootstrap anti-lockout; harness Node com 35 checks).
   - (Catálogo detalhado de riscos em `.specs/spikes/M0-platform-decision.md` → "Desafios técnicos adicionais a comprovar".)
 
-**Spike de Governança do Workspace (admin)** - PLANNED
+**Spike de Governança do Workspace (admin)** - COMPLETE (B-004 resolvido)
 
-- 🔴 Pode invalidar a stack A. Confirmar com o admin do Workspace municipal: deploy de web app Apps Script para o domínio, Apps Script API habilitada (para `clasp`/CI), escopos OAuth, Shared Drives e compartilhamento externo, cotas multiusuário.
+- ✅ **VALIDADO (2026-06-24)** pela diretora na conta `@ensinablumenau` (roteiro `TESTE-DIRETORA.md`): **deploy de web app Apps Script "Qualquer pessoa"** concluiu e o endpoint responde `ok`; **compartilhamento externo** de arquivo do Drive **liberado**. Nenhum bloqueio do admin. Stack A (AD-007) confirmada quanto à governança.
+- Não testado diretamente (verificar quando precisar, sem bloquear o M1): Apps Script API para `clasp`/CI, Shared Drives, escopos OAuth de Advanced Services. Mitigação: deploy manual pelo editor já basta para iniciar.
 
 **Spike de UI Mobile / Scanner no HtmlService** - COMPLETE (B-005 resolvido)
 

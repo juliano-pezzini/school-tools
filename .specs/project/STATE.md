@@ -1,7 +1,7 @@
 # State
 
-**Last Updated:** 2026-06-22
-**Current Work:** M0 — Spikes de capacidade da stack **CONCLUÍDOS** (NFe/NFC-e, scanner/ISBN, relatórios+gráficos, papéis+isolamento todos validados em deploy). Bloqueio restante para fechar o M0 técnico: **Governança do tenant (B-004)** — depende da diretora rodar o Hello World em `@ensinablumenau`.
+**Last Updated:** 2026-06-24
+**Current Work:** M0 — Spikes de capacidade da stack **CONCLUÍDOS** (NFe/NFC-e, scanner/ISBN, relatórios+gráficos, papéis+isolamento todos validados em deploy) e **Governança do tenant (B-004) RESOLVIDA** (2026-06-24): a diretora rodou os dois testes em `@ensinablumenau` — deploy de web app "Qualquer pessoa" e compartilhamento externo **ambos liberados**. **M0 técnico fechado para a stack A (Pure Google).** Próximo: spikes de descoberta restantes (Robô da Biblioteca/Pergamum — B-002) e início do M1.
 
 ---
 
@@ -74,15 +74,27 @@
 **Workaround:** Seguir com a stack provisória (Pure Google + Playwright) nos spikes de validação.
 **Resolution:** Concluir os spikes de capacidade do M0 (NFe/NFC-e, QR/barcode, relatórios, gráficos, papéis+SSO). Confirmação → consolidar AD-007; falha → escalar a ferramenta afetada para B/C.
 
-### B-002: Sistema web de catálogo da biblioteca — identificado (Pergamum); fluxo de catalogacão a confirmar
+### B-002: Sistema web de catálogo da biblioteca — IDENTIFICADO (MSTECH "Sala de Leitura" / Ensinablu-Biblioteca v1.70.1.0, ASP.NET WebForms, login duplo usuário-senha/Google, staging disponível); fluxo de cadastro a confirmar
 
 **Discovered:** 2026-06-20
-**Impact:** Bloqueia o M3 (Robô da Biblioteca) — sem conhecer o sistema e o fluxo de cadastro, não há como validar o Playwright.
+**Status:** 🟡 **PARCIALMENTE RESOLVIDO (2026-06-25).** Sistema, fornecedor e stack identificados; confirmado **web app** (Playwright serve), com **login usuário/senha** alternativo ao Google (de-risca o SSO) e **ambiente de homologação** para testes seguros. Resta o **print do fluxo de cadastro** e confirmar se há **importação por ISBN** (ou importação em massa de acervo).
+**Impact:** Bloqueia o M3 (Robô da Biblioteca) — falta detalhar o fluxo de cadastro e o login SAML para validar o Playwright ponta a ponta.
 **Workaround:** Nenhum.
 **Resolution:** Identificar o sistema com a equipe da biblioteca durante o Spike Robô da Biblioteca.
 **Finding (2026-06-20, pesquisa web):** A rede de Blumenau usa **Pergamum** (consórcio PUCPR), instância `https://pergamum.blumenau.sc.gov.br/` (Biblioteca Municipal Dr. Fritz Müller), versão **web nova (SPA)**. **Conectividade: internet pública** — um runner Playwright em nuvem (GitHub Actions) alcança (não é intranet). O login público visto é o do **catálogo do leitor** (“Código de usuário + senha de empréstimo”), **sem captcha aparente** — mas é o lado patrono, não a catalogacão.
 **Finding (2026-06-20, check do filtro de unidades):** No filtro “Biblioteca/Unidade” da Pesquisa Avançada **NÃO aparecem escolas** — só a Biblioteca Municipal (+ Arquivo Histórico). Conclusão: a biblioteca da **escola NÃO está nesta base** do Pergamum central. O sistema da escola é **outro** (outra base Pergamum, outro software, ou inexistente) e só será identificado direto com a bibliotecária/print. A instância central só serve de referência (existe API pública de leitura `cod_empresa=212`).
-**Ainda a confirmar com a bibliotecária (tenant-only):** (1) **qual sistema** a biblioteca da escola usa para cadastrar livros (nome/URL ou ícone do programa)? (2) é pelo **navegador** (Playwright serve) ou **programa desktop** (não serve)? (3) o cadastro permite **importar por ISBN (Z39.50/cópia de catalogacão)** — se sim, o robô dispensa o scraping de metadados (Google Books).
+**Finding (2026-06-24, sistema IDENTIFICADO pela bibliotecária):** A biblioteca da escola usa **"Ensinablu - Biblioteca", versão 1.70.1.0**, em **`https://ensinablu.blumenau.sc.gov.br/Biblioteca/`**. NÃO é o Pergamum central — é o módulo de biblioteca da plataforma municipal **Ensinablu** (mesma plataforma das contas `@ensinablumenau`). Confirmações da própria URL/verificação (2026-06-24):
+- ✅ **É sistema WEB** (acessado pelo navegador) → **Playwright serve** (não é desktop). Responde 1 das 3 perguntas pendentes.
+- ✅ **Conectividade: internet pública** (domínio `blumenau.sc.gov.br`) → runner em nuvem (GitHub Actions) alcança; não é intranet.
+- ⚠️ **Autenticação via SAML SSO** — o endpoint redireciona para `https://ensinablu.blumenau.sc.gov.br/SAML/` (resposta SAML `RequestDenied` sem sessão; há `Logout.ashx`). **Implicação p/ o robô:** o login NÃO é um form usuário/senha simples — é federado (provável IdP municipal, possivelmente ligado ao Google Workspace do domínio). O Playwright terá de **percorrer o fluxo SAML** (e talvez o consentimento Google). Risco: 2FA/sessão e a fragilidade de automatizar SSO. Mitigação a avaliar: reaproveitar sessão/cookies, conta de serviço, ou rodar com a sessão da bibliotecária.
+**Ainda a confirmar com a bibliotecária (tenant-only, exige login/print):** (1) ✅ resolvido — é web. (2) o **fluxo de cadastro** de um livro novo (campos do formulário, telas) — pedir **print da tela de cadastro**. (3) o cadastro permite **importar por ISBN (Z39.50/cópia de catalogação)** trazendo título/autor/capa — se sim, o robô dispensa o scraping de metadados (Google Books); senão, preenche via Google Books a partir do ISBN. (4) qual o **mecanismo de login** que ela vê (botão "Entrar com Google"? usuário/senha próprio? redireciona sozinho?).
+**Finding (2026-06-25, fornecedor + produto + stack identificados via pesquisa web):**
+- **Fornecedor/empresa:** **MSTECH — Educação e Tecnologia** (Bauru/SP; `mstech.com.br`; tel. (14) 3235-5500; `contato@mstech.com.br`). Empresa BR, +20 anos, +10 mil unidades escolares, certificação MPS.BR. "Ensinablu" é a marca da Prefeitura de Blumenau para o **Gestão Escolar** da MSTECH (login `Versão: 2.56.3.0`).
+- **Produto da biblioteca = "Sala de Leitura MSTECH"** (`mstech.com.br/Sala-de-Leitura.html`) — é o módulo `/Biblioteca/` (v1.70.1.0). **Funcionalidades anunciadas:** cadastro de acervo e leitores centralizado; categorização personalizada; relatórios de acervo/leitores; **pesquisa on-line do acervo**; **impressão de etiquetas de lombada**; movimentação de acervo; **"permite a importação de acervo de uma ou mais bibliotecas"** (⭐ possível **importação em massa** — rota alternativa ao RPA por livro; investigar se aceita planilha/lote). **NÃO menciona** importação por ISBN/Z39.50 com auto-preenchimento → continua a confirmar com a bibliotecária (pergunta 3).
+- **Stack técnica (p/ o Playwright):** **ASP.NET WebForms** — páginas `.aspx`, navegação por **`__doPostBack` + ViewState**, handlers `.ashx`, **SAML SSO** (`/SAML/`). Implicações: o robô precisa **esperar postbacks** (não é SPA com rotas limpas), e os seletores caem em IDs gerados pelo servidor (`ctl00$ContentPlaceHolder1$...`) — preferir âncoras por label/texto estável.
+- **Login é DUPLO (de-risca o SSO):** a tela oferece **usuário/senha** *e* botão **"Login com o Google"** (`__doPostBack('ctl00$ContentPlaceHolder1$_btnLoginGoogle','')`). Ou seja, o robô **pode evitar o fluxo Google** se a bibliotecária tiver **usuário/senha local** do sistema — bem mais simples de automatizar que o SAML/Google. Confirmar com ela qual login ela usa.
+- **⭐ Ambiente de HOMOLOGAÇÃO (staging) existe:** `https://h-ensinablu.blumenau.sc.gov.br/Login.aspx` (entidade "Prefeitura Municipal de Blumenau"). **Ideal para testar o Playwright sem tocar na base de produção** — validar login + fluxo de cadastro ali primeiro. Confirmar se a biblioteca da escola existe/está populada nesse ambiente.
+- **Suporte/docs:** sem manual público do módulo encontrado (produto é B2B, docs atrás de login). Há vídeos de tutorial do EnsinaBlu no YouTube (diários/boletim) — pode haver um de biblioteca. Documentação detalhada provavelmente só via MSTECH/SEMED ou print da bibliotecária.
 
 ### B-003: Viabilidade da integração NFe/NFC-e incerta
 
@@ -100,9 +112,14 @@
 ### B-004: Políticas de governança do Workspace municipal desconhecidas
 
 **Discovered:** 2026-06-20
+**Status:** ✅ **RESOLVIDO (2026-06-24).** A diretora rodou os dois testes em `@ensinablumenau` (roteiro `TESTE-DIRETORA.md`) e ambos **passaram sem bloqueio do admin**:
+- **Teste 1 (deploy de web app Apps Script):** concluiu e gerou URL pública; o endpoint responde **`ok`** (verificado). Confirma que o tenant **permite** publicar web app Apps Script com **"Executar como: Eu"** e **"Quem tem acesso: Qualquer pessoa"** — base da stack A e do **endpoint de leitura pública** dos relatórios (B-006).
+- **Teste 2 (compartilhamento externo):** compartilhou um Doc com um Gmail pessoal (fora do domínio) **sem restrição** — confirma que o tenant **não bloqueia** compartilhamento externo (relevante para AD-005/Drive e transparência da APP).
+**Conclusão:** stack A (AD-007) **não é invalidada** pela governança; M0 técnico pode fechar para Pure Google.
+**Ainda não testado diretamente (verificar quando necessário, sem bloquear o M1):** Apps Script API habilitada para `clasp`/CI (deploy automatizado), Shared Drives, e escopos OAuth de Advanced Services. Mitigação: editar/implantar pelo editor do Apps Script (manual) já é suficiente para começar; automação via clasp é otimização, não bloqueio.
 **Impact:** 🔴 Pode invalidar a stack A (AD-007). O admin pode bloquear deploy de web app Apps Script, a Apps Script API (clasp/CI), escopos OAuth, Shared Drives ou compartilhamento externo.
 **Workaround:** Nenhum; se bloqueado, escalar para stack B/C (web app + Supabase/Cloudflare).
-**Resolution:** Teste empírico “Hello World” em `spikes/m0-hello-world/` — a diretora implanta um Web App mínimo na conta da escola. Prova deploy + SSO + câmera (B-005) de uma vez. Capturar avisos/bloqueios do admin como resultado.
+**Resolution:** Teste empírico “Hello World” em `spikes/m0-hello-world/` — a diretora implanta um Web App mínimo na conta da escola. Prova deploy + SSO + câmera (B-005) de uma vez. Capturar avisos/bloqueios do admin como resultado. → **Substituído pelo roteiro simplificado `TESTE-DIRETORA.md` (2 testes); ambos passaram em 2026-06-24.**
 
 ### B-005: Acesso à câmera dentro do iframe sandbox do HtmlService incerto
 
@@ -158,7 +175,7 @@
   - [x] Autorização por papéis (admin/tesoureiro/leitor/funcionário) integrada ao SSO Google. — **VALIDADO (2026-06-22)**: spike `spikes/m0-roles/` implantado e testado no deploy (todos os checks passaram — papel desconhecido corrigido via bootstrap anti-lockout). Papéis enforçados server-side (`requireRole_`), **isolamento por linha** (funcionário vê só o próprio saldo), painel de "ataque" confirma que chamar a função direto também é barrado. Modelo: `executeAs USER_DEPLOYING` + `Session.getActiveUser` como âncora.
   - [ ] Autorização por papéis (admin/tesoureiro/leitor) integrada ao SSO Google.
 - [x] M0: Confirmar form factor do app de banco de horas (PWA responsivo vs. outro) com SSO Google. → CONFIRMADO (2026-06-21): professores usam **mais no celular** para **consultar saldos/extratos** → PWA responsivo mobile-first. Regras (cliente): **diretora aprova e lança**, **sem limites**; **obrigatório rastrear o vínculo hora extra ↔ compensação** (qual compensação quitou qual hora extra).
-- [ ] M0 (🔴 Governança/B-004): a **diretora** roda um **teste prático** com a conta `@ensinablumenau` (publicar web app de teste + compartilhar arquivo externo) para confirmar permissões do tenant, em vez de abrir chamado com a TI da Prefeitura.
+- [x] M0 (🔴 Governança/B-004): a **diretora** roda um **teste prático** com a conta `@ensinablumenau` (publicar web app de teste + compartilhar arquivo externo) para confirmar permissões do tenant, em vez de abrir chamado com a TI da Prefeitura. → **RESOLVIDO (2026-06-24): ambos os testes passaram — deploy de web app "Qualquer pessoa" e compartilhamento externo liberados.**
 - [ ] M0 (🔴 Scanner/B-005): validar câmera no iframe do HtmlService + libs externas sob CSP; senão, página de scanner à parte.
 - [ ] M0: integridade de dados em Sheets (LockService/concorrência, auditoria append-only, backup/restore).
 - [ ] M0: isolamento server-side de privacidade (funcionário vê só o próprio saldo) e papéis enforced no servidor.
