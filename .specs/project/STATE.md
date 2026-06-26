@@ -1,11 +1,18 @@
 # State
 
-**Last Updated:** 2026-06-24
-**Current Work:** M0 — Spikes de capacidade da stack **CONCLUÍDOS** (NFe/NFC-e, scanner/ISBN, relatórios+gráficos, papéis+isolamento todos validados em deploy) e **Governança do tenant (B-004) RESOLVIDA** (2026-06-24): a diretora rodou os dois testes em `@ensinablumenau` — deploy de web app "Qualquer pessoa" e compartilhamento externo **ambos liberados**. **M0 técnico fechado para a stack A (Pure Google).** Próximo: spikes de descoberta restantes (Robô da Biblioteca/Pergamum — B-002) e início do M1.
+**Last Updated:** 2026-06-25
+**Current Work:** **M1 iniciado** — feature **Lançamentos & Saldo** especificada (`.specs/features/lancamentos-saldo/spec.md` + `context.md`, 2026-06-25). Gray areas resolvidas via discuss (ver AD-009). Próximo: **Design** da feature (modelo de dados Sheets, concorrência/LockService, guard de fechamento server-side) ou seguir para Tasks. Em paralelo, B-002 (Robô da Biblioteca/MSTECH) aguarda infos da bibliotecária (print do cadastro, importação por ISBN, login). M0 técnico fechado para a stack A (Pure Google).
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-009: Lançamentos & Saldo — decisões de escopo do MVP do caixa (2026-06-25)
+
+**Decision:** Caixa **único**; **saldo de abertura** registrado uma vez; categoria **texto livre com autocomplete** das anteriores; correção por **edição/exclusão direta** do lançamento rastreando **só a última alteração** (usuário+data); **fechamento mensal** do caixa que torna o período **totalmente imutável** (sem novo lançamento/edição/exclusão), **reabrível** com auditoria, por **admin ou tesoureiro**; data retroativa só em mês aberto, data futura bloqueada.
+**Reason:** Simplicidade para o tesoureiro não-técnico, mantendo proteção da prestação de contas via barreira de fechamento.
+**Trade-off:** Edição/exclusão diverge da lição "auditoria append-only" do STATE.md. Mitigado por: campos de última alteração + o fechamento mensal como fronteira de imutabilidade (a auditoria forte vive no fechamento, não no histórico por linha).
+**Impact:** Guia o design da feature (modelo Sheets com registro de meses fechados, guard server-side de fechamento/data reaproveitando o padrão `requireRole_` do spike `m0-roles`).
 
 ### AD-001: Arquitetura guiada por custo e baixa manutenção (2026-06-20)
 
