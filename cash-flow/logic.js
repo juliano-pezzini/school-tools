@@ -182,6 +182,51 @@ function assertLimits_(item) {
   return { requiresConfirmation: isFinite(valor) && valor > VALOR_TETO };
 }
 
+// ===========================================================================
+// T4 — Guardas de data/período (puras)
+// ===========================================================================
+
+/** Valor comparável (apenas ano/mês/dia) de uma `Date`. */
+function dayValue_(date) {
+  if (!(date instanceof Date) || isNaN(date.getTime())) {
+    throw new Error('Data inválida.');
+  }
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+/**
+ * Rejeita data futura em relação a `hoje` (ambos `Date`, comparados por dia).
+ * Aceita hoje e datas passadas.
+ */
+function assertNotFuture_(date, hoje) {
+  if (dayValue_(date) > dayValue_(hoje)) {
+    throw new Error('Não é possível lançar com data futura.');
+  }
+  return true;
+}
+
+/** Formata `YYYY-MM` como `MM/AAAA` para mensagens ao usuário. */
+function periodLabel_(yyyymm) {
+  var p = String(yyyymm).split('-');
+  return p[1] + '/' + p[0];
+}
+
+/**
+ * Rejeita uma data cujo período (`YYYY-MM`) esteja na lista de períodos
+ * fechados. `closedPeriods` é um array de chaves `YYYY-MM`. Mês sem linha
+ * (ausente da lista) é considerado aberto.
+ */
+function assertPeriodOpen_(date, closedPeriods) {
+  var key = periodKey_(date);
+  var closed = closedPeriods || [];
+  for (var i = 0; i < closed.length; i++) {
+    if (closed[i] === key) {
+      throw new Error('O período ' + periodLabel_(key) + ' está fechado. Reabra-o para alterar.');
+    }
+  }
+  return true;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     formatBRL_: formatBRL_,
@@ -191,6 +236,8 @@ if (typeof module !== 'undefined' && module.exports) {
     currentMonthKey_: currentMonthKey_,
     parseMoney_: parseMoney_,
     sanitizeLancamento_: sanitizeLancamento_,
-    assertLimits_: assertLimits_
+    assertLimits_: assertLimits_,
+    assertNotFuture_: assertNotFuture_,
+    assertPeriodOpen_: assertPeriodOpen_
   };
 }
