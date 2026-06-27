@@ -319,3 +319,79 @@ function addLancamento(item, clientToken) {
     return { ok: true, id: id };
   });
 }
+
+// ===========================================================================
+// Lançamentos service — edição e exclusão lógica (auditadas)
+// ===========================================================================
+
+/** Localiza um lançamento vivo (não excluído) por id; null se ausente. */
+function findLancamentoById_(rows, id) {
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].Id === String(id) && !rows[i].Excluido) return rows[i];
+  }
+  return null;
+}
+
+/** Resumo (JSON) a partir de uma linha lida (Data como Date). */
+function resumoRow_(row) {
+  return resumoLancamento_({
+    data: row.Data ? formatDate_(row.Data) : '',
+    tipo: row.Tipo,
+    valor: row.Valor,
+    categoria: row.Categoria
+  });
+}
+
+/**
+ * Edita um lançamento de período aberto: atualiza a linha no lugar, grava
+ * AlteradoPor/AlteradoEm e anexa auditoria(`editar`, antes→depois). Revalida no
+ * servidor data futura, mês fechado (origem e destino) e limites de valor/texto.
+ */
+function editLancamento(id, item) {
+  var who = requireRole_(['admin', 'tesoureiro']);
+  return withLock_(function () {
+    var rows = readLancamentoRows_();
+    var current = findLancamentoById_(rows, id);
+    if (!current) throw new Error('Lançamento não encontrado.');
+
+    var closed = closedPeriods_();
+    assertPeriodOpen_(current.Data, closed);          // origem deve estar aberta
+
+    var novaData = parseDateBR_(item && item.data);
+    assertNotFuture_(novaData, hoje_());
+    assertPeriodOpen_(novaData, closed);              // não mover p/ mês fechado
+
+    var clean = sanitizeLancamento_(item);
+    assertLimits_(clean);
+
+    var antes = resumoRow_(current);
+    var sheet = getSheet_(SH_LANC);
+    sheet.getRange(current._row, 2, 1, 5)
+      .setValues([[formatDate_(novaData), clean.tipo, clean.categoria, clean.valor, clean.descricao]]);
+    sheet.getRange(current._row, 9, 1, 2).setValues([[who.email, nowStamp_()]]);
+
+    appendAudit_('editar', id, antes + ' => ' + resumoLancamento_(clean));
+    return { ok: true };
+  });
+}
+
+/**
+ * Exclusão LÓGICA (soft-delete): marca Excluido=true + ExcluidoPor/ExcluidoEm,
+ * nunca remove a linha, e anexa auditoria(`excluir`). Revalida período aberto.
+ */
+function deleteLancamento(id) {
+  var who = requireRole_(['admin', 'tesoureiro']);
+  return withLock_(function () {
+    var rows = readLancamentoRows_();
+    var current = findLancamentoById_(rows, id);
+    if (!current) throw new Error('Lançamento não encontrado.');
+
+    assertPeriodOpen_(current.Data, closedPeriods_());
+
+    getSheet_(SH_LANC).getRange(current._row, 11, 1, 3)
+      .setValues([[true, who.email, nowStamp_()]]);
+
+    appendAudit_('excluir', id, resumoRow_(current));
+    return { ok: true };
+  });
+}
