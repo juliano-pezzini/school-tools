@@ -203,15 +203,15 @@ Detalhes e justificativas em [context.md](context.md). Resumo:
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| LANC-01 | P1: Saldo de abertura | - | Pending |
-| LANC-02 | P1: Registrar lançamento | - | Pending |
-| LANC-03 | P1: Ver saldo corrente | - | Pending |
-| LANC-04 | P1: Listar lançamentos | - | Pending |
-| LANC-05 | P2: Editar/excluir com rastro da última alteração | - | Pending |
-| LANC-06 | P2: Categoria com autocomplete | - | Pending |
-| LANC-07 | P2: Fechamento mensal do caixa | - | Pending |
-| LANC-08 | P2: Reabrir período fechado | - | Pending |
-| LANC-09 | P3: Filtrar lançamentos | - | Pending |
+| LANC-01 | P1: Saldo de abertura | Design | In Design |
+| LANC-02 | P1: Registrar lançamento | Design | In Design |
+| LANC-03 | P1: Ver saldo corrente | Design | In Design |
+| LANC-04 | P1: Listar lançamentos | Design | In Design |
+| LANC-05 | P2: Editar/excluir com rastro da última alteração | Design | In Design |
+| LANC-06 | P2: Categoria com autocomplete | Design | In Design |
+| LANC-07 | P2: Fechamento mensal do caixa | Design | In Design |
+| LANC-08 | P2: Reabrir período fechado | Design | In Design |
+| LANC-09 | P3: Filtrar lançamentos | Design | In Design |
 
 **ID format:** `LANC-NN`
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified

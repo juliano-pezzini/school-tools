@@ -58,11 +58,11 @@
 
 ### Features
 
-**Lançamentos & Saldo** - SPEC
+**Lançamentos & Saldo** - DESIGN
 
 - Registrar entrada/saída com data, valor, categoria e descrição.
 - Saldo corrente automático.
-- Spec: `.specs/features/lancamentos-saldo/spec.md` (+ `context.md`). Inclui saldo de abertura, edição/exclusão com rastro da última alteração, e **fechamento mensal** do caixa (trava período). Caixa único; categoria texto livre com autocomplete.
+- Spec: `.specs/features/lancamentos-saldo/spec.md` (+ `context.md`, `design.md`). Inclui saldo de abertura, edição/exclusão com rastro da última alteração, e **fechamento mensal** do caixa (trava período). Caixa único; categoria texto livre com autocomplete. Tool em `cash-flow/` reusando padrões dos spikes m0-roles/m0-reports.
 
 **Comprovantes** - PLANNED
 

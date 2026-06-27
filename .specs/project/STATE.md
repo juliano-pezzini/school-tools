@@ -1,7 +1,7 @@
 # State
 
 **Last Updated:** 2026-06-25
-**Current Work:** **M1 iniciado** — feature **Lançamentos & Saldo** especificada (`.specs/features/lancamentos-saldo/spec.md` + `context.md`, 2026-06-25). Gray areas resolvidas via discuss (ver AD-009). Próximo: **Design** da feature (modelo de dados Sheets, concorrência/LockService, guard de fechamento server-side) ou seguir para Tasks. Em paralelo, B-002 (Robô da Biblioteca/MSTECH) aguarda infos da bibliotecária (print do cadastro, importação por ISBN, login). M0 técnico fechado para a stack A (Pure Google).
+**Current Work:** **M1 iniciado** — feature **Lançamentos & Saldo**: spec + context + **design** prontos (`.specs/features/lancamentos-saldo/`, design 2026-06-25/26). Arquitetura: web app Apps Script em `cash-flow/` reusando o seam de autorização do `m0-roles` e helpers pt-BR/agregação do `m0-reports`; saldo recalculado sob demanda; LockService nas escritas; abas Lancamentos/Config/Fechamentos/Usuarios. Próximo: **Tasks** (quebra atômica + testes). Em paralelo, B-002 (Robô da Biblioteca/MSTECH) aguarda infos da bibliotecária. M0 técnico fechado para a stack A.
 
 ---
 
