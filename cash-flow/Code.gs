@@ -193,3 +193,129 @@ function ensureBootstrapAdmin_() {
   if (countAdmins_(users) > 0) return; // já existe admin: usuário novo fica 'desconhecido'
   addUser_(real, 'Você (admin)', 'admin');
 }
+
+// ===========================================================================
+// Helpers de escrita: lock, leitura de linhas, períodos fechados, auditoria
+// ===========================================================================
+
+/**
+ * Serializa toda escrita com o lock de script. Timeout vira mensagem pt-BR.
+ * Reusa o padrão de integridade em Sheets dos spikes.
+ */
+function withLock_(fn) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(LOCK_TIMEOUT_MS)) {
+    throw new Error('Sistema ocupado, tente novamente.');
+  }
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Converte um valor de célula em `Date` (aceita Date ou `dd/MM/yyyy`); null se inválido. */
+function toDate_(v) {
+  if (v instanceof Date) return v;
+  if (v == null || String(v).trim() === '') return null;
+  try { return parseDateBR_(String(v)); } catch (e) { return null; }
+}
+
+/**
+ * Lê todas as linhas da aba Lancamentos como objetos no formato esperado pela
+ * lógica pura (Data como Date; Excluido como boolean). Inclui `_row` (número da
+ * linha na planilha) para edição/exclusão.
+ */
+function readLancamentoRows_() {
+  var values = getSheet_(SH_LANC).getDataRange().getValues();
+  var out = [];
+  for (var i = 1; i < values.length; i++) {
+    var r = values[i];
+    if (!r[0]) continue;
+    out.push({
+      Id: String(r[0]),
+      Data: toDate_(r[1]),
+      Tipo: String(r[2]).toLowerCase(),
+      Categoria: String(r[3] == null ? '' : r[3]),
+      Valor: Number(r[4]) || 0,
+      Descricao: String(r[5] == null ? '' : r[5]),
+      CriadoPor: String(r[6] || ''),
+      CriadoEm: String(r[7] || ''),
+      AlteradoPor: String(r[8] || ''),
+      AlteradoEm: String(r[9] || ''),
+      Excluido: r[10] === true || String(r[10]).toLowerCase() === 'true',
+      ExcluidoPor: String(r[11] || ''),
+      ExcluidoEm: String(r[12] || ''),
+      ClientToken: String(r[13] || ''),
+      _row: i + 1
+    });
+  }
+  return out;
+}
+
+/** Lista de períodos `YYYY-MM` atualmente fechados (Status = `fechado`). */
+function closedPeriods_() {
+  var values = getSheet_(SH_FECH).getDataRange().getValues();
+  var out = [];
+  for (var i = 1; i < values.length; i++) {
+    if (!values[i][0]) continue;
+    if (String(values[i][1]).toLowerCase() === 'fechado') out.push(String(values[i][0]));
+  }
+  return out;
+}
+
+/** Anexa um registro append-only à trilha de Auditoria (sempre dentro do lock). */
+function appendAudit_(acao, lancamentoId, detalhe) {
+  getSheet_(SH_AUD).appendRow([
+    nowStamp_(), acao, String(lancamentoId || ''), getEffectiveEmail_(), String(detalhe || '')
+  ]);
+}
+
+/** Resumo curto (JSON) de um lançamento sanitizado, para a coluna Detalhe. */
+function resumoLancamento_(l) {
+  return JSON.stringify({ data: l.data, tipo: l.tipo, valor: l.valor, categoria: l.categoria });
+}
+
+// ===========================================================================
+// Lançamentos service — criação (idempotente + auditada)
+// ===========================================================================
+
+/**
+ * Cria um lançamento. Ordem das barreiras: autorização → (lock) → idempotência
+ * (dedup por clientToken) → guarda de data/período → sanitização/limites →
+ * append da linha (CriadoPor/CriadoEm do servidor) → auditoria(`criar`).
+ * Reenvio com o mesmo clientToken retorna o id existente (sucesso idempotente).
+ */
+function addLancamento(item, clientToken) {
+  var who = requireRole_(['admin', 'tesoureiro']);
+  return withLock_(function () {
+    var cache = CacheService.getScriptCache();
+    var rows = readLancamentoRows_();
+    var existingTokens = [];
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].ClientToken) existingTokens.push({ token: rows[i].ClientToken, id: rows[i].Id });
+    }
+    var cachedId = clientToken ? cache.get('tok_' + clientToken) : null;
+    if (cachedId) existingTokens.push({ token: String(clientToken), id: cachedId });
+
+    // Decisão pura: token ausente lança; token repetido vira sucesso idempotente.
+    var dec = dedupDecision_(existingTokens, clientToken);
+    if (dec.isDup) return { ok: true, id: dec.existingId, duplicate: true };
+
+    // Revalidação server-side (a UI é cosmética).
+    var data = parseDateBR_(item && item.data);
+    assertNotFuture_(data, hoje_());
+    assertPeriodOpen_(data, closedPeriods_());
+    var clean = sanitizeLancamento_(item);
+    assertLimits_(clean);
+
+    var id = Utilities.getUuid();
+    getSheet_(SH_LANC).appendRow([
+      id, formatDate_(data), clean.tipo, clean.categoria, clean.valor, clean.descricao,
+      who.email, nowStamp_(), '', '', false, '', '', String(clientToken)
+    ]);
+    cache.put('tok_' + clientToken, id, IDEMPOTENCY_TTL_S);
+    appendAudit_('criar', id, resumoLancamento_(clean));
+    return { ok: true, id: id };
+  });
+}
