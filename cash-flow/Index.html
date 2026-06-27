@@ -302,6 +302,20 @@
       }
 
       // ===== Lançamento (criar/editar) =====
+      var VALOR_TETO = 1000000;   // teto técnico (R$ 1.000.000,00) — acima exige confirmação na UI.
+      // Espelha parseMoney_ do servidor o suficiente para a checagem de teto.
+      function parseValorBR(raw){
+        if (raw == null) return NaN;
+        var s = String(raw).trim();
+        if (s === '') return NaN;
+        if (s.indexOf(',') !== -1) {
+          s = s.replace(/\./g, '').replace(',', '.');
+        } else if ((s.split('.').length - 1) > 1) {
+          s = s.replace(/\./g, '');
+        }
+        var n = Number(s);
+        return isFinite(n) ? n : NaN;
+      }
       function buildItem(){
         return {
           tipo: el('lTipo').value,
@@ -313,8 +327,14 @@
       }
       function submitLancamento(){
         var btn = el('lSalvar');
-        btn.disabled = true;                 // anti-duplo-clique (complementa idempotência do servidor)
         var item = buildItem();
+        // Teto técnico: exige confirmação explícita antes de gravar (LANC, anti fat-finger).
+        var n = parseValorBR(item.valor);
+        if (isFinite(n) && n > VALOR_TETO &&
+            !confirm('O valor informado (' + fmtBRL(n) + ') excede R$ 1.000.000,00. Confirma o registro deste valor?')) {
+          return; // usuário cancelou — não grava, botão segue habilitado
+        }
+        btn.disabled = true;                 // anti-duplo-clique (complementa idempotência do servidor)
         if (editId) {
           google.script.run
             .withSuccessHandler(function(){ btn.disabled = false; box('lResult','✅ Lançamento atualizado.','ok'); resetLancamentoForm(); afterWrite(); })

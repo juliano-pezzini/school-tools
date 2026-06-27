@@ -14,6 +14,16 @@ describe('listForView_ — ordenação', () => {
     const out = listForView_([A, B, C], {});
     expect(out.map((r) => r.id)).toEqual(['B', 'C', 'A']);
   });
+
+  // Desempate (LANC-04) deve ser CriadoEm DESC e independer da ordem de entrada:
+  // o mais recente vem primeiro nas duas permutações. Isto fixa a direção do
+  // comparador (pega inversão do sinal do tie-break).
+  it('desempata por CriadoEm desc independentemente da ordem de entrada', () => {
+    const early = { id: 'early', Data: d('10/06/2026'), CriadoEm: dt('2026-06-10T08:00'), Tipo: 'entrada', Categoria: 'X', Excluido: false };
+    const late = { id: 'late', Data: d('10/06/2026'), CriadoEm: dt('2026-06-10T09:30'), Tipo: 'entrada', Categoria: 'X', Excluido: false };
+    expect(listForView_([early, late], {}).map((r) => r.id)).toEqual(['late', 'early']);
+    expect(listForView_([late, early], {}).map((r) => r.id)).toEqual(['late', 'early']);
+  });
 });
 
 describe('listForView_ — soft-delete', () => {
