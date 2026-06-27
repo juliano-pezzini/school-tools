@@ -444,3 +444,52 @@ function listCategorias() {
   requireRole_(['admin', 'tesoureiro', 'leitor']);
   return computeCategorias_(readLancamentoRows_());
 }
+
+// ===========================================================================
+// Saldo service — saldo de abertura (singleton em Config)
+// ===========================================================================
+
+/**
+ * Valida o valor de abertura na fronteira: aceita `>= 0` (zero permitido),
+ * normaliza vírgula/ponto e arredonda a 2 casas. Vazio/não numérico/negativo
+ * são rejeitados com a mensagem pt-BR do design.
+ */
+function parseOpeningValue_(raw) {
+  var s = String(raw == null ? '' : raw).trim();
+  if (typeof raw !== 'number') {
+    if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.');
+    else if ((s.split('.').length - 1) > 1) s = s.replace(/\./g, '');
+  }
+  var n = Number(s);
+  if (s === '' || !isFinite(n) || n < 0) {
+    throw new Error('Saldo de abertura não pode ser negativo.');
+  }
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * Registra o saldo de abertura (uma única vez). Aceita `valor >= 0` e data
+ * não-futura; rejeita se já definido. Grava `SALDO_ABERTURA_VALOR/DATA` na aba
+ * Config e anexa auditoria. LANC-01.
+ */
+function setOpeningBalance(opts) {
+  var who = requireRole_(['admin', 'tesoureiro']);
+  opts = opts || {};
+  return withLock_(function () {
+    var existente = readConfigMap_()['SALDO_ABERTURA_VALOR'];
+    if (existente != null && String(existente).trim() !== '') {
+      throw new Error('O saldo de abertura já foi registrado.');
+    }
+    var valor = parseOpeningValue_(opts.valor);
+    var data = parseDateBR_(opts.data);
+    assertNotFuture_(data, hoje_());
+
+    var stamp = nowStamp_();
+    var sheet = getSheet_(SH_CONFIG);
+    sheet.appendRow(['SALDO_ABERTURA_VALOR', valor, who.email, stamp]);
+    sheet.appendRow(['SALDO_ABERTURA_DATA', formatDate_(data), who.email, stamp]);
+
+    appendAudit_('criar', 'abertura', JSON.stringify({ valor: valor, data: formatDate_(data) }));
+    return { ok: true };
+  });
+}
