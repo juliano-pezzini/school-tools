@@ -88,12 +88,109 @@ function currentMonthKey_(hoje) {
   return periodKey_(hoje);
 }
 
+// ===========================================================================
+// T3 — Sanitização de valor e limites de campo
+// ===========================================================================
+
+var VALOR_TETO = 1000000;     // R$ 1.000.000,00 — teto técnico (exige confirmação)
+var DESCRICAO_MAX = 280;      // chars
+var CATEGORIA_MAX = 60;       // chars
+
+/**
+ * Normaliza um valor monetário aceito como número ou string pt-BR/US.
+ * Aceita vírgula OU ponto como separador decimal e ponto como milhar.
+ * Rejeita vazio, não-numérico, `<= 0` ou mais de 2 casas decimais (pt-BR).
+ * Retorna número arredondado a 2 casas.
+ */
+function parseMoney_(raw) {
+  if (raw == null || String(raw).trim() === '') {
+    throw new Error('Informe um valor maior que zero, com até dois centavos.');
+  }
+  var s = String(raw).trim();
+  if (typeof raw === 'number') {
+    if (!isFinite(raw)) throw new Error('Informe um valor maior que zero, com até dois centavos.');
+    s = String(raw);
+  } else {
+    // String: normaliza separadores.
+    if (s.indexOf(',') !== -1) {
+      // Vírgula é o separador decimal; pontos são milhar.
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      // Sem vírgula: 2+ pontos => milhar; 1 ponto => decimal.
+      var dots = s.split('.').length - 1;
+      if (dots > 1) s = s.replace(/\./g, '');
+    }
+  }
+  if (!/^-?\d+(\.\d+)?$/.test(s)) {
+    throw new Error('Informe um valor maior que zero, com até dois centavos.');
+  }
+  var decimals = s.indexOf('.') === -1 ? '' : s.split('.')[1];
+  if (decimals.length > 2) {
+    throw new Error('Informe um valor maior que zero, com até dois centavos.');
+  }
+  var n = Number(s);
+  if (!isFinite(n) || n <= 0) {
+    throw new Error('Informe um valor maior que zero, com até dois centavos.');
+  }
+  return Math.round(n * 100) / 100;
+}
+
+/** Remove caracteres de controle e converte para string aparada. */
+function cleanText_(s) {
+  return String(s == null ? '' : s).replace(/[\u0000-\u001f]/g, '').trim();
+}
+
+/**
+ * Sanitiza um lançamento vindo do cliente (fronteira do sistema).
+ * Valida tipo (`entrada`/`saida`) e valor (`> 0`, ≤ 2 casas, normalizado).
+ * Não aplica limites de tamanho/teto — isso é `assertLimits_`.
+ * Retorna `{ data, tipo, categoria, valor, descricao }`.
+ */
+function sanitizeLancamento_(item) {
+  item = item || {};
+  var tipo = String(item.tipo == null ? '' : item.tipo).toLowerCase().trim();
+  if (tipo !== 'entrada' && tipo !== 'saida') {
+    throw new Error('Tipo inválido: use entrada ou saída.');
+  }
+  var valor = parseMoney_(item.valor);
+  return {
+    data: cleanText_(item.data),
+    tipo: tipo,
+    categoria: cleanText_(item.categoria),
+    valor: valor,
+    descricao: cleanText_(item.descricao)
+  };
+}
+
+/**
+ * Aplica limites de campo a um item já sanitizado.
+ * Lança (pt-BR) para descrição > 280 ou categoria > 60.
+ * Para valor acima do teto técnico, NÃO bloqueia: retorna
+ * `{ requiresConfirmation: true }` (a UI confirma antes de gravar).
+ */
+function assertLimits_(item) {
+  item = item || {};
+  var categoria = String(item.categoria == null ? '' : item.categoria);
+  var descricao = String(item.descricao == null ? '' : item.descricao);
+  if (categoria.length > CATEGORIA_MAX) {
+    throw new Error('Categoria muito longa (máximo de 60 caracteres).');
+  }
+  if (descricao.length > DESCRICAO_MAX) {
+    throw new Error('Descrição muito longa (máximo de 280 caracteres).');
+  }
+  var valor = Number(item.valor);
+  return { requiresConfirmation: isFinite(valor) && valor > VALOR_TETO };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     formatBRL_: formatBRL_,
     formatDate_: formatDate_,
     parseDateBR_: parseDateBR_,
     periodKey_: periodKey_,
-    currentMonthKey_: currentMonthKey_
+    currentMonthKey_: currentMonthKey_,
+    parseMoney_: parseMoney_,
+    sanitizeLancamento_: sanitizeLancamento_,
+    assertLimits_: assertLimits_
   };
 }
