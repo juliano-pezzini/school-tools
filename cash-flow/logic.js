@@ -391,6 +391,41 @@ function dedupDecision_(existingTokens, clientToken) {
   return { isDup: false };
 }
 
+// ===========================================================================
+// T9 — Transições de período (fechar/reabrir)
+// ===========================================================================
+
+/**
+ * Decisão de FECHAR um período (`YYYY-MM`).
+ * `status` é o estado atual (`fechado`/`aberto`; ausente = aberto, mês sem
+ * linha). `mesCorrente` é a chave `YYYY-MM` do mês corrente.
+ * - mês futuro (`periodo > mesCorrente`) ⇒ erro pt-BR;
+ * - já `fechado` ⇒ no-op idempotente `{ changed:false, jaFechado:true }`;
+ * - senão ⇒ `{ changed:true, status:'fechado' }`.
+ * Comparação lexicográfica de `YYYY-MM` é válida (formato fixo, zero-padded).
+ */
+function closeDecision_(periodo, status, mesCorrente) {
+  if (String(periodo) > String(mesCorrente)) {
+    throw new Error('Não é possível fechar um mês futuro.');
+  }
+  if (status === 'fechado') {
+    return { changed: false, jaFechado: true, status: 'fechado' };
+  }
+  return { changed: true, status: 'fechado' };
+}
+
+/**
+ * Decisão de REABRIR um período (`YYYY-MM`).
+ * - já `aberto` (ou sem linha) ⇒ no-op idempotente `{ changed:false, jaAberto:true }`;
+ * - `fechado` ⇒ `{ changed:true, status:'aberto' }`.
+ */
+function reopenDecision_(periodo, status) {
+  if (status === 'fechado') {
+    return { changed: true, status: 'aberto' };
+  }
+  return { changed: false, jaAberto: true, status: 'aberto' };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     formatBRL_: formatBRL_,
@@ -407,6 +442,8 @@ if (typeof module !== 'undefined' && module.exports) {
     computeCategorias_: computeCategorias_,
     computeCashState_: computeCashState_,
     listForView_: listForView_,
-    dedupDecision_: dedupDecision_
+    dedupDecision_: dedupDecision_,
+    closeDecision_: closeDecision_,
+    reopenDecision_: reopenDecision_
   };
 }
