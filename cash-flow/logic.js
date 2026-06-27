@@ -317,6 +317,53 @@ function computeCashState_(config, rows) {
   };
 }
 
+// ===========================================================================
+// T7 — Listagem: ordenação, ocultação de excluídos e filtros
+// ===========================================================================
+
+/** Valor comparável de uma `Data` (aceita `Date`). */
+function dataSortValue_(v) {
+  if (v instanceof Date) return v.getTime();
+  return v;
+}
+
+/**
+ * View de lançamentos para a UI:
+ * - oculta `Excluido`;
+ * - ordena por `Data` desc e, em empate, por `CriadoEm` desc (determinístico);
+ * - filtra por `mes` (`YYYY-MM`), `tipo` (`entrada`/`saida`) e/ou `categoria`
+ *   (comparada por chave normalizada). Cada filtro é opcional.
+ */
+function listForView_(rows, filtro) {
+  rows = rows || [];
+  filtro = filtro || {};
+  var catKey = filtro.categoria != null && String(filtro.categoria).trim() !== ''
+    ? normalizeCategoryKey_(filtro.categoria) : null;
+
+  var visible = [];
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    if (!row || row.Excluido === true) continue;
+    if (filtro.mes && periodKey_(row.Data) !== filtro.mes) continue;
+    if (filtro.tipo && row.Tipo !== filtro.tipo) continue;
+    if (catKey !== null && normalizeCategoryKey_(row.Categoria) !== catKey) continue;
+    visible.push(row);
+  }
+
+  visible.sort(function (a, b) {
+    var da = dataSortValue_(a.Data);
+    var db = dataSortValue_(b.Data);
+    if (da < db) return 1;
+    if (da > db) return -1;
+    // Empate de Data → CriadoEm desc.
+    var ca = a.CriadoEm, cb = b.CriadoEm;
+    if (ca < cb) return 1;
+    if (ca > cb) return -1;
+    return 0;
+  });
+  return visible;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     formatBRL_: formatBRL_,
@@ -331,6 +378,7 @@ if (typeof module !== 'undefined' && module.exports) {
     assertPeriodOpen_: assertPeriodOpen_,
     normalizeCategoryKey_: normalizeCategoryKey_,
     computeCategorias_: computeCategorias_,
-    computeCashState_: computeCashState_
+    computeCashState_: computeCashState_,
+    listForView_: listForView_
   };
 }
