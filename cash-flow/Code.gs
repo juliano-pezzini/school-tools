@@ -413,7 +413,7 @@ function deleteLancamento(id) {
 }
 
 // ===========================================================================
-// Config (key-value) — leitura
+// Config (key-value) — leitura e escrita
 // ===========================================================================
 
 /** Mapa Chave→Valor da aba Config. */
@@ -425,6 +425,38 @@ function readConfigMap_() {
     map[String(values[i][0])] = values[i][1];
   }
   return map;
+}
+
+/**
+ * Grava ou atualiza uma chave na aba Config (update-or-append).
+ * Deve ser chamada DENTRO do lock.
+ */
+function setConfigValue_(key, val, who, stamp) {
+  var sheet = getSheet_(SH_CONFIG);
+  var values = sheet.getDataRange().getValues();
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][0]) === key) {
+      sheet.getRange(i + 1, 2, 1, 3).setValues([[val, who, stamp]]);
+      return;
+    }
+  }
+  sheet.appendRow([key, val, who, stamp]);
+}
+
+/**
+ * Remove uma chave da aba Config (deleta a linha inteira).
+ * Deve ser chamada DENTRO do lock. Retorna true se encontrou e removeu.
+ */
+function deleteConfigKey_(key) {
+  var sheet = getSheet_(SH_CONFIG);
+  var values = sheet.getDataRange().getValues();
+  for (var i = values.length - 1; i >= 1; i--) {
+    if (String(values[i][0]) === key) {
+      sheet.deleteRow(i + 1);
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -484,7 +516,7 @@ function parseOpeningValue_(raw) {
 }
 
 /**
- * Registra o saldo de abertura (uma única vez). Aceita `valor >= 0` e data
+ * Registra o saldo de abertura (primeira vez). Aceita `valor >= 0` e data
  * não-futura; rejeita se já definido. Grava `SALDO_ABERTURA_VALOR/DATA` na aba
  * Config e anexa auditoria. LANC-01.
  */
@@ -501,11 +533,92 @@ function setOpeningBalance(opts) {
     assertNotFuture_(data, hoje_());
 
     var stamp = nowStamp_();
-    var sheet = getSheet_(SH_CONFIG);
-    sheet.appendRow(['SALDO_ABERTURA_VALOR', valor, who.email, stamp]);
-    sheet.appendRow(['SALDO_ABERTURA_DATA', formatDate_(data), who.email, stamp]);
+    setConfigValue_('SALDO_ABERTURA_VALOR', valor, who.email, stamp);
+    setConfigValue_('SALDO_ABERTURA_DATA', formatDate_(data), who.email, stamp);
 
     appendAudit_('criar', 'abertura', JSON.stringify({ valor: valor, data: formatDate_(data) }));
+    return { ok: true };
+  });
+}
+
+/**
+ * Lê o saldo de abertura (valor + data) para pré-preencher o modal na UI.
+ * Retorna `{ definida, valor, data }`.
+ */
+function getOpeningBalance() {
+  requireRole_(['admin', 'tesoureiro', 'leitor']);
+  var map = readConfigMap_();
+  var raw = map['SALDO_ABERTURA_VALOR'];
+  if (raw == null || String(raw).trim() === '') {
+    return { definida: false, valor: null, data: null };
+  }
+  return { definida: true, valor: Number(raw), data: String(map['SALDO_ABERTURA_DATA'] || '') };
+}
+
+/**
+ * Atualiza o saldo de abertura existente. Aceita valor ≥ 0, data não-futura,
+ * guarda de período aberto (mês da abertura) e auditoria antes→depois.
+ */
+function updateOpeningBalance(opts) {
+  var who = requireRole_(['admin', 'tesoureiro']);
+  opts = opts || {};
+  return withLock_(function () {
+    var map = readConfigMap_();
+    var existente = map['SALDO_ABERTURA_VALOR'];
+    if (existente == null || String(existente).trim() === '') {
+      throw new Error('Não há saldo de abertura para editar. Registre primeiro.');
+    }
+    var antes = { valor: Number(existente), data: String(map['SALDO_ABERTURA_DATA'] || '') };
+
+    var novoValor = parseOpeningValue_(opts.valor);
+    var novaData = parseDateBR_(opts.data);
+    assertNotFuture_(novaData, hoje_());
+
+    // Guarda de período: bloqueia se o mês da data original OU da nova está fechado.
+    var closed = closedPeriods_();
+    var dataOrigem = null;
+    try { dataOrigem = parseDateBR_(antes.data); } catch (e) { /* ok se inválida */ }
+    if (dataOrigem) assertPeriodOpen_(dataOrigem, closed);
+    assertPeriodOpen_(novaData, closed);
+
+    var stamp = nowStamp_();
+    setConfigValue_('SALDO_ABERTURA_VALOR', novoValor, who.email, stamp);
+    setConfigValue_('SALDO_ABERTURA_DATA', formatDate_(novaData), who.email, stamp);
+
+    var depois = { valor: novoValor, data: formatDate_(novaData) };
+    appendAudit_('editar', 'abertura', JSON.stringify(antes) + ' => ' + JSON.stringify(depois));
+    return { ok: true };
+  });
+}
+
+/**
+ * Remove o saldo de abertura (volta a indefinido). Guarda de período aberto no
+ * mês da abertura atual; auditoria `excluir`.
+ */
+function clearOpeningBalance() {
+  var who = requireRole_(['admin', 'tesoureiro']);
+  return withLock_(function () {
+    var map = readConfigMap_();
+    var existente = map['SALDO_ABERTURA_VALOR'];
+    if (existente == null || String(existente).trim() === '') {
+      throw new Error('Não há saldo de abertura para remover.');
+    }
+    var antes = { valor: Number(existente), data: String(map['SALDO_ABERTURA_DATA'] || '') };
+
+    // Guarda de período: bloqueia se o mês da abertura está fechado.
+    var closed = closedPeriods_();
+    try {
+      var dataOrigem = parseDateBR_(antes.data);
+      assertPeriodOpen_(dataOrigem, closed);
+    } catch (e) {
+      if (e.message && e.message.indexOf('fechado') !== -1) throw e;
+      // Data inválida/parse error: permite remover (dados corrompidos).
+    }
+
+    deleteConfigKey_('SALDO_ABERTURA_VALOR');
+    deleteConfigKey_('SALDO_ABERTURA_DATA');
+
+    appendAudit_('excluir', 'abertura', JSON.stringify(antes));
     return { ok: true };
   });
 }

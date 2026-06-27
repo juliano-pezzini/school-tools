@@ -9,10 +9,12 @@
   1.  Abrir o Web App: a 1ª execução cria a planilha "Fluxo de Caixa — APP (dados)"
       com as 5 abas (Lancamentos, Config, Fechamentos, Usuarios, Auditoria) e
       promove você a admin (bootstrap anti-lockout).
-  2.  Painel "Saldo": deve sinalizar "abertura não definida" e mostrar R$ 0,00.
-  3.  Registrar abertura R$ 1.000,00 (data não-futura) → saldo passa a R$ 1.000,00;
-      o formulário de abertura fica desabilitado ("só uma vez"); 2ª tentativa é
-      bloqueada com mensagem pt-BR.
+  2.  Painel "Saldo": deve sinalizar "abertura não definida" com link "Registrar agora".
+  3.  Clicar "Registrar agora" → modal abre → preencher R$ 1.000,00 (data não-futura) →
+      "Registrar" → saldo passa a R$ 1.000,00; botão ✏️ aparece ao lado de "Abertura".
+  3b. Clicar ✏️ → modal abre pré-preenchido → editar valor → "Salvar" → saldo recalcula;
+      Auditoria registra (editar, antes→depois). "Remover" → confirmação → abertura
+      volta a indefinida + CTA reaparece; Auditoria registra (excluir).
   4.  Lançar ENTRADA R$ 200,00 e SAÍDA R$ 50,00 → lista mostra os dois; saldo
       R$ 1.150,00. Dar duplo-clique no "Adicionar" não cria duplicata (clientToken).
   5.  Editar a entrada (mudar valor) → saldo recalcula; conferir AlteradoPor/Em na
@@ -78,6 +80,13 @@
       .actions button { padding: 5px 9px; font-size: .8rem; margin-right: 4px; }
       .field { margin-bottom: 8px; }
       .pill { display: inline-block; font-size: .72rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: #e8eaf6; color: #283593; }
+      /* modal */
+      .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 100; }
+      .modal-backdrop.hidden { display: none; }
+      .modal { background: #fff; border-radius: 14px; padding: 20px; width: 92%; max-width: 440px; box-shadow: 0 8px 30px rgba(0,0,0,.22); }
+      .modal h2 { margin: 0 0 14px; font-size: 1.05rem; }
+      .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+      .edit-pen { background: none; border: none; cursor: pointer; padding: 2px 6px; font-size: .95rem; width: auto; color: #1565c0; vertical-align: middle; }
     </style>
   </head>
   <body>
@@ -93,26 +102,6 @@
       <div id="saldoNum" class="saldo-num">—</div>
       <div id="saldoTotais" class="totais muted"></div>
       <div id="saldoWarn"></div>
-    </div>
-
-    <!-- ===== Saldo de abertura ===== -->
-    <div class="card">
-      <h2>Saldo de abertura</h2>
-      <p class="muted" style="margin-top:0;">Registrado <b>uma única vez</b>. Aceita valor ≥ 0 e data não-futura.</p>
-      <div class="row">
-        <div class="grow">
-          <label for="abValor">Valor de abertura (R$)</label>
-          <input id="abValor" inputmode="decimal" placeholder="Ex.: 1.000,00" />
-        </div>
-        <div class="grow">
-          <label for="abData">Data de abertura</label>
-          <input id="abData" type="date" />
-        </div>
-        <div>
-          <button id="abBtn" onclick="saveAbertura()">Registrar abertura</button>
-        </div>
-      </div>
-      <div id="abResult"></div>
     </div>
 
     <!-- ===== Lançamento (criar/editar) ===== -->
@@ -207,6 +196,28 @@
       </table>
     </div>
 
+    <!-- ===== Modal: Saldo de abertura ===== -->
+    <div id="abModal" class="modal-backdrop hidden" onclick="if(event.target===this)closeAbModal()">
+      <div class="modal" role="dialog" aria-labelledby="abModalTitle">
+        <h2 id="abModalTitle">Saldo de abertura</h2>
+        <p class="muted" style="margin-top:0;">Aceita valor ≥ 0 e data não-futura.</p>
+        <div class="field">
+          <label for="abValor">Valor de abertura (R$)</label>
+          <input id="abValor" inputmode="decimal" placeholder="Ex.: 1.000,00" />
+        </div>
+        <div class="field">
+          <label for="abData">Data de abertura</label>
+          <input id="abData" type="date" />
+        </div>
+        <div id="abResult"></div>
+        <div class="modal-footer">
+          <button class="ghost" onclick="closeAbModal()">Cancelar</button>
+          <button id="abRemover" class="danger hidden" onclick="removeAbertura()">Remover</button>
+          <button id="abBtn" onclick="saveAbertura()">Registrar</button>
+        </div>
+      </div>
+    </div>
+
     <script>
       // ---- formatação / helpers ----
       var BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -264,32 +275,78 @@
         var neg = Number(s.saldoAtual) < 0;
         el('saldoNum').textContent = fmtBRL(s.saldoAtual);
         el('saldoNum').classList.toggle('neg', neg);
+        var defined = !!s.aberturaDefinida;
+        var abHtml = 'Abertura: <b>'+fmtBRL(s.saldoAbertura)+'</b>';
+        if (defined) abHtml += ' <button class="edit-pen" title="Editar saldo de abertura" onclick="openAbModal()">✏️</button>';
         el('saldoTotais').innerHTML =
-          '<div>Abertura: <b>'+fmtBRL(s.saldoAbertura)+'</b></div>'+
+          '<div>'+abHtml+'</div>'+
           '<div>Entradas: <b>'+fmtBRL(s.totalEntradas)+'</b></div>'+
           '<div>Saídas: <b>'+fmtBRL(s.totalSaidas)+'</b></div>';
         var w = '';
-        if (!s.aberturaDefinida) w += '<div class="warn">⚠️ Saldo de abertura não definido — tratado como R$ 0,00. Registre a abertura abaixo.</div>';
+        if (!defined) w += '<div class="warn">⚠️ Saldo de abertura não definido — tratado como R$ 0,00. <a href="#" onclick="openAbModal();return false;" style="font-weight:700;">Registrar agora</a>.</div>';
         if (neg) w += '<div class="warn">⚠️ Saldo negativo.</div>';
         el('saldoWarn').innerHTML = w;
-        // Reflete a regra "só uma vez" no formulário de abertura.
-        var defined = !!s.aberturaDefinida;
-        el('abValor').disabled = defined;
-        el('abData').disabled = defined;
-        el('abBtn').disabled = defined;
-        if (defined) box('abResult', 'Abertura já registrada ('+fmtBRL(s.saldoAbertura)+'). Para corrigir, edite o registro com o período aberto.', 'ok');
       }
 
-      // ===== Abertura =====
+      // ===== Abertura (modal) =====
+      var abDefined = false;  // tracks whether opening balance is set
+      function openAbModal(){
+        box('abResult','','');
+        el('abValor').value = '';
+        el('abData').value = '';
+        el('abValor').disabled = false;
+        el('abData').disabled = false;
+        el('abBtn').disabled = false;
+        show('abRemover', false);
+        el('abModalTitle').textContent = 'Saldo de abertura';
+        el('abBtn').textContent = 'Registrar';
+        show('abModal', true);
+        // Pre-fill if editing
+        google.script.run
+          .withSuccessHandler(function(ob){
+            abDefined = ob.definida;
+            if (ob.definida) {
+              el('abValor').value = String(ob.valor).replace('.', ',');
+              // ob.data is 'dd/MM/yyyy' — convert to yyyy-MM-dd for input
+              if (ob.data) {
+                var p = String(ob.data).split('/');
+                if (p.length === 3) el('abData').value = p[2]+'-'+p[1]+'-'+p[0];
+              }
+              el('abBtn').textContent = 'Salvar';
+              el('abModalTitle').textContent = 'Editar saldo de abertura';
+              show('abRemover', true);
+            }
+          })
+          .withFailureHandler(function(){})
+          .getOpeningBalance();
+      }
+      function closeAbModal(){ show('abModal', false); }
       function saveAbertura(){
         var btn = el('abBtn');
         btn.disabled = true;
         var opts = { valor: el('abValor').value, data: inputToBR(el('abData').value) };
+        var fn = abDefined ? 'updateOpeningBalance' : 'setOpeningBalance';
         google.script.run
-          .withSuccessHandler(function(){ box('abResult','✅ Saldo de abertura registrado.','ok'); loadSaldo(); })
+          .withSuccessHandler(function(){
+            box('abResult','✅ Saldo de abertura '+(abDefined?'atualizado':'registrado')+'.','ok');
+            setTimeout(function(){ closeAbModal(); loadSaldo(); }, 800);
+          })
           .withFailureHandler(function(e){ btn.disabled = false; box('abResult','❌ '+esc(e.message),'err'); })
-          .setOpeningBalance(opts);
+          [fn](opts);
       }
+      function removeAbertura(){
+        if (!confirm('Remover o saldo de abertura? O valor voltará a ser tratado como R$ 0,00.')) return;
+        el('abRemover').disabled = true;
+        google.script.run
+          .withSuccessHandler(function(){
+            box('abResult','✅ Saldo de abertura removido.','ok');
+            setTimeout(function(){ closeAbModal(); loadSaldo(); }, 800);
+          })
+          .withFailureHandler(function(e){ el('abRemover').disabled = false; box('abResult','❌ '+esc(e.message),'err'); })
+          .clearOpeningBalance();
+      }
+      // ESC to close modal
+      document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && !el('abModal').classList.contains('hidden')) closeAbModal(); });
 
       // ===== Categorias (autocomplete) =====
       function loadCategorias(){
