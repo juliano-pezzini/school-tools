@@ -10,7 +10,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 
 **Design**: [.specs/features/lancamentos-saldo/design.md](design.md)
 **Spec**: [.specs/features/lancamentos-saldo/spec.md](spec.md)
-**Status**: Draft (aguardando aprovação)
+**Status**: In Progress (Vitest; per-phase workers; commit per task)
 
 > **Decisão estrutural (refina o design):** a lógica pura vai para `cash-flow/logic.js` (funções puras, testáveis em Node) e a "cola" do Apps Script (Sheets, LockService, Session, CacheService) fica em `cash-flow/Code.gs`. No Apps Script os dois arquivos compartilham o escopo global (sem `import`); no Node, `logic.js` é importável via guarda `typeof module !== 'undefined' && (module.exports = {...})`. Isso concretiza a nota do design "testar a lógica pura fora do Apps Script". Tudo continua deployado junto (clasp converte `.js` → `.gs`).
 
@@ -91,7 +91,7 @@ T16
 
 ## Task Breakdown
 
-### T1: Scaffold do projeto `cash-flow/` + tooling de teste
+### T1: Scaffold do projeto `cash-flow/` + tooling de teste  ✅ Done (ac67804)
 
 **What**: Criar a estrutura da ferramenta e o tooling de teste (Vitest), com `logic.js` vazio (guarda de export dual-env) e `appsscript.json` copiado do spike.
 **Where**: `cash-flow/package.json`, `cash-flow/logic.js`, `cash-flow/appsscript.json`, `cash-flow/.claspignore`
@@ -116,7 +116,7 @@ T16
 
 ---
 
-### T2: Helpers pt-BR (formatação/parse de data e moeda) [P]
+### T2: Helpers pt-BR (formatação/parse de data e moeda) [P]  ✅ Done (d42d24d, 15 tests)
 
 **What**: Implementar `formatBRL_`, `formatDate_`, `parseDateBR_`, `periodKey_` (→ `'YYYY-MM'`) e o helper de "mês corrente" no fuso `America/Sao_Paulo`.
 **Where**: `cash-flow/logic.js`, `cash-flow/format.test.js`
@@ -142,7 +142,7 @@ T16
 
 ---
 
-### T3: Sanitização de valor e limites de campo [P]
+### T3: Sanitização de valor e limites de campo [P]  ✅ Done (544f73a, 17 tests)
 
 **What**: Implementar `sanitizeLancamento_` (normaliza moeda, valida tipo/valor `>0`/≤2 casas) e `assertLimits_` (teto R$ 1.000.000,00, descrição ≤280, categoria ≤60).
 **Where**: `cash-flow/logic.js`, `cash-flow/sanitize.test.js`
@@ -167,7 +167,7 @@ T16
 
 ---
 
-### T4: Guardas de data/período (puras) [P]
+### T4: Guardas de data/período (puras) [P]  ✅ Done (3be1e97, 8 tests)
 
 **What**: Implementar `assertNotFuture_(date, hoje)` e `assertPeriodOpen_(date, closedPeriods)` (decisão pura dado o conjunto de meses fechados).
 **Where**: `cash-flow/logic.js`, `cash-flow/guards.test.js`
@@ -191,7 +191,7 @@ T16
 
 ---
 
-### T5: Normalização e listagem de categorias [P]
+### T5: Normalização e listagem de categorias [P]  ✅ Done (e6e59ac, 7 tests)
 
 **What**: Implementar `normalizeCategoryKey_(s)` (sem caixa/acento/espaço nas pontas) e `computeCategorias_(rows)` (distintas por chave, 1ª grafia, ordenadas, ignora `excluido`).
 **Where**: `cash-flow/logic.js`, `cash-flow/categorias.test.js`
@@ -215,7 +215,7 @@ T16
 
 ---
 
-### T6: Cálculo de saldo (abertura + corrente) [P]
+### T6: Cálculo de saldo (abertura + corrente) [P]  ✅ Done (75f8cbc, 7 tests)
 
 **What**: Implementar `computeCashState_(config, rows)` = abertura + Σ entradas − Σ saídas, ignorando `excluido`; abertura indefinida ⇒ 0 + flag; permite negativo.
 **Where**: `cash-flow/logic.js`, `cash-flow/saldo.test.js`
@@ -240,7 +240,7 @@ T16
 
 ---
 
-### T7: Listagem — ordenação, ocultação de excluídos e filtros [P]
+### T7: Listagem — ordenação, ocultação de excluídos e filtros [P]  ✅ Done (59eb226, 7 tests)
 
 **What**: Implementar `listForView_(rows, filtro)`: oculta `excluido`, ordena por `Data` desc e empate por `CriadoEm` desc, filtra por mês/tipo/categoria.
 **Where**: `cash-flow/logic.js`, `cash-flow/list.test.js`
@@ -264,7 +264,7 @@ T16
 
 ---
 
-### T8: Decisão de idempotência (clientToken) [P]
+### T8: Decisão de idempotência (clientToken) [P]  ✅ Done (5d58f06, 4 tests)
 
 **What**: Implementar `dedupDecision_(existingTokens, clientToken)` → `{ isDup, existingId? }` (lógica pura usada dentro do lock).
 **Where**: `cash-flow/logic.js`, `cash-flow/idempotency.test.js`
@@ -287,7 +287,7 @@ T16
 
 ---
 
-### T9: Transições de período (fechar/reabrir) [P]
+### T9: Transições de período (fechar/reabrir) [P]  ✅ Done (a615232, 8 tests)
 
 **What**: Implementar `closeDecision_(periodo, status, mesCorrente)` e `reopenDecision_(periodo, status)`: bloqueia mês futuro; no-op idempotente (já fechado/aberto); senão muda estado.
 **Where**: `cash-flow/logic.js`, `cash-flow/periods.test.js`
@@ -310,7 +310,7 @@ T16
 
 ---
 
-### T10: Camada de dados + auth seam + bootstrap (5 abas)
+### T10: Camada de dados + auth seam + bootstrap (5 abas)  ✅ Done (b7d6637)
 
 **What**: `getSpreadsheet_` (via `PropertiesService` `CASHFLOW_SHEET_ID`), `buildSheets_` criando `Lancamentos/Config/Fechamentos/Usuarios/Auditoria` com cabeçalhos; copiar o auth seam (`requireRole_`, bootstrap anti-lockout) do m0-roles.
 **Where**: `cash-flow/Code.gs`
@@ -334,7 +334,7 @@ T16
 
 ---
 
-### T11: Escrita de lançamento (addLancamento) com idempotência + auditoria
+### T11: Escrita de lançamento (addLancamento) com idempotência + auditoria  ✅ Done (6c6086f)
 
 **What**: `addLancamento(item, clientToken)` ligando auth → idempotência (`CacheService` + coluna `ClientToken` dentro do lock) → guardas → sanitização → `LockService` → append linha → `appendAudit_('criar')`.
 **Where**: `cash-flow/Code.gs`
@@ -359,7 +359,7 @@ T16
 
 ---
 
-### T12: Editar e soft-delete (com trilha)
+### T12: Editar e soft-delete (com trilha)  ✅ Done (2adec97)
 
 **What**: `editLancamento(id, item)` (atualiza linha + `Alterado*` + `appendAudit_('editar', antes→depois)`) e `deleteLancamento(id)` (marca `Excluido*` + `appendAudit_('excluir')`); revalida período aberto.
 **Where**: `cash-flow/Code.gs`
@@ -383,7 +383,7 @@ T16
 
 ---
 
-### T13: Leituras (listLancamentos, getCashState, listCategorias)
+### T13: Leituras (listLancamentos, getCashState, listCategorias)  ✅ Done (072dc6e)
 
 **What**: Ligar as funções de leitura à lógica pura: `listLancamentos(filtro)` → `listForView_`; `getCashState()` → `computeCashState_`; `listCategorias()` → `computeCategorias_`.
 **Where**: `cash-flow/Code.gs`
@@ -407,7 +407,7 @@ T16
 
 ---
 
-### T14: Saldo de abertura (setOpeningBalance)
+### T14: Saldo de abertura (setOpeningBalance)  ✅ Done (f1104b3)
 
 **What**: `setOpeningBalance({ valor, data })` na aba `Config`: aceita `valor ≥ 0` e data não-futura; rejeita se já definido; grava auditoria de atualização.
 **Where**: `cash-flow/Code.gs`
@@ -430,7 +430,7 @@ T16
 
 ---
 
-### T15: Fechamento (listClosedPeriods, closeMonth, reopenMonth)
+### T15: Fechamento (listClosedPeriods, closeMonth, reopenMonth)  ✅ Done (a34bec1)
 
 **What**: Ligar o serviço de fechamento à lógica de transições: `listClosedPeriods()`, `closeMonth(periodo)`, `reopenMonth(periodo)` com `LockService` e auditoria de fechar/reabrir.
 **Where**: `cash-flow/Code.gs`
@@ -453,7 +453,7 @@ T16
 
 ---
 
-### T16: doGet + UI pt-BR (Index.html) + smoke de deploy
+### T16: doGet + UI pt-BR (Index.html) + smoke de deploy  ✅ Done (059bae1)
 
 **What**: `doGet()` + `cash-flow/Index.html`: formulário (tipo/data/valor/categoria com autocomplete/descrição) gerando `clientToken` e desabilitando o botão no envio; lista com filtros; saldo com alerta de negativo; abertura; controles fechar/reabrir. Inclui checklist de smoke de deploy.
 **Where**: `cash-flow/Code.gs` (doGet), `cash-flow/Index.html`
