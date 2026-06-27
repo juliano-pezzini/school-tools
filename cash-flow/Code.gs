@@ -395,3 +395,52 @@ function deleteLancamento(id) {
     return { ok: true };
   });
 }
+
+// ===========================================================================
+// Config (key-value) — leitura
+// ===========================================================================
+
+/** Mapa Chave→Valor da aba Config. */
+function readConfigMap_() {
+  var values = getSheet_(SH_CONFIG).getDataRange().getValues();
+  var map = {};
+  for (var i = 1; i < values.length; i++) {
+    if (!values[i][0]) continue;
+    map[String(values[i][0])] = values[i][1];
+  }
+  return map;
+}
+
+/**
+ * Config de abertura no formato esperado por `computeCashState_`:
+ * `{ saldoAbertura }` se definida e numérica; `null` caso contrário
+ * (a abertura é considerada indefinida → tratada como 0).
+ */
+function aberturaConfig_() {
+  var raw = readConfigMap_()['SALDO_ABERTURA_VALOR'];
+  if (raw == null || String(raw).trim() === '') return null;
+  var n = Number(raw);
+  return isFinite(n) ? { saldoAbertura: n } : null;
+}
+
+// ===========================================================================
+// Leituras (papel inclui leitor) — delegam à lógica pura
+// ===========================================================================
+
+/** Lista de lançamentos para a UI (oculta excluídos, ordena/filtra). LANC-04/09/11. */
+function listLancamentos(filtro) {
+  requireRole_(['admin', 'tesoureiro', 'leitor']);
+  return listForView_(readLancamentoRows_(), filtro || {});
+}
+
+/** Estado do caixa (abertura + totais + saldo corrente, ignora excluídos). LANC-03. */
+function getCashState() {
+  requireRole_(['admin', 'tesoureiro', 'leitor']);
+  return computeCashState_(aberturaConfig_(), readLancamentoRows_());
+}
+
+/** Categorias distintas (normalizadas) para autocomplete. LANC-06. */
+function listCategorias() {
+  requireRole_(['admin', 'tesoureiro', 'leitor']);
+  return computeCategorias_(readLancamentoRows_());
+}
