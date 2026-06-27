@@ -364,6 +364,33 @@ function listForView_(rows, filtro) {
   return visible;
 }
 
+// ===========================================================================
+// T8 — Decisão de idempotência (clientToken)
+// ===========================================================================
+
+/**
+ * Decisão pura de deduplicação por `clientToken` (usada dentro do lock).
+ * `existingTokens` é a lista de tokens já gravados, como array de
+ * `{ token, id }`. Regras:
+ * - token novo ⇒ `{ isDup: false }`;
+ * - token já visto ⇒ `{ isDup: true, existingId }` (sucesso idempotente);
+ * - token vazio/ausente ⇒ rejeita (default do design: token é obrigatório).
+ */
+function dedupDecision_(existingTokens, clientToken) {
+  if (clientToken == null || String(clientToken).trim() === '') {
+    throw new Error('Token de idempotência ausente.');
+  }
+  var token = String(clientToken);
+  var list = existingTokens || [];
+  for (var i = 0; i < list.length; i++) {
+    var entry = list[i] || {};
+    if (String(entry.token) === token) {
+      return { isDup: true, existingId: entry.id };
+    }
+  }
+  return { isDup: false };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     formatBRL_: formatBRL_,
@@ -379,6 +406,7 @@ if (typeof module !== 'undefined' && module.exports) {
     normalizeCategoryKey_: normalizeCategoryKey_,
     computeCategorias_: computeCategorias_,
     computeCashState_: computeCashState_,
-    listForView_: listForView_
+    listForView_: listForView_,
+    dedupDecision_: dedupDecision_
   };
 }
