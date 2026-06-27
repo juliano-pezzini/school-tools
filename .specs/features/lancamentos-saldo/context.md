@@ -2,6 +2,8 @@
 
 Decisões capturadas na fase Specify (discuss) em 2026-06-25. Resolvem as áreas ambíguas antes do design/implementação.
 
+> **Atualização 2026-06-26 (oficialização da spec v2 — AD-010):** uma segunda leitura "olhos novos" reabriu e endureceu decisões. A **D-4 foi superada** pela D-7/D-8 (soft-delete + trilha de auditoria append-only) e foi adicionada a D-9 (idempotência). Veja abaixo. A spec oficial é a [spec.md](spec.md) (v2).
+
 ## D-1: Caixa único
 
 **Decisão:** v1 controla **um único caixa/saldo** (não múltiplas contas).
@@ -17,11 +19,26 @@ Decisões capturadas na fase Specify (discuss) em 2026-06-25. Resolvem as áreas
 **Decisão:** Categoria é **texto livre**, mas com **autocomplete** das categorias já usadas (sugere anteriores; aceita nova).
 **Implicação:** Não há tabela fixa de categorias; as sugestões derivam dos lançamentos existentes. Consistência é incentivada, não imposta.
 
-## D-4: Correção por edição/exclusão direta (não append-only)
+## D-4: Correção por edição/exclusão direta (não append-only) — ⚠️ SUPERADA pela D-7/D-8 (2026-06-26)
 
-**Decisão:** Corrigir um lançamento errado é **editar ou excluir** o próprio lançamento. Rastrear **somente a última alteração**: atributos de **usuário** e **data/hora** da última modificação.
-**Trade-off / atenção:** Diverge da lição "auditoria append-only" registrada no STATE.md (que sugeria estorno em vez de edição/exclusão). O usuário optou conscientemente por edição/exclusão direta pela simplicidade para o tesoureiro.
-**Mitigação da auditoria:** (a) campos de última alteração (quem/quando); (b) o **fechamento mensal** (D-6) cria a fronteira de imutabilidade — uma vez conferido e fechado, o período não muda mais. A trilha de auditoria forte vive na barreira de fechamento, não no histórico de cada linha.
+**Decisão (v1):** Corrigir um lançamento errado era **editar ou excluir fisicamente** o próprio lançamento, rastreando **somente a última alteração** (usuário + data/hora).
+**Trade-off / atenção:** Divergia da lição "auditoria append-only" do STATE.
+**Status:** **Superada na oficialização da spec v2 (AD-010).** A segunda leitura concluiu que perder o histórico e apagar linhas fisicamente é fraco para a prestação de contas. Mantida a UX simples (o tesoureiro só vê "editar"/"excluir"), mas a mecânica passou a soft-delete (D-7) + trilha de auditoria append-only (D-8).
+
+## D-7: Exclusão lógica (soft-delete) — nova (2026-06-26)
+
+**Decisão:** Excluir um lançamento o marca como `excluido` (não apaga a linha), gravando quem/quando excluiu. Ele some das listas e do saldo, mas permanece auditável.
+**Implicação:** Listagem e saldo ignoram lançamentos `excluido`. A linha original e seus dados ficam preservados na base.
+
+## D-8: Trilha de auditoria append-only — nova (2026-06-26)
+
+**Decisão:** Além de `AlteradoPor/AlteradoEm` na própria linha (última alteração), toda edição/exclusão anexa um registro **append-only** em uma aba `Auditoria` (ação, id do lançamento, autor, timestamp, resumo antes→depois).
+**Implicação:** O histórico de correções deixa de se perder; a auditoria forte vive tanto na barreira de fechamento (D-6) quanto nesta trilha.
+
+## D-9: Idempotência de gravação — nova (2026-06-26)
+
+**Decisão:** `addLancamento` recebe um `clientToken` (UUID por formulário); um segundo envio com o mesmo token (duplo-clique/reenvio/conexão lenta) é tratado como sucesso idempotente, sem criar duplicata.
+**Implicação:** Protege o número final contra lançamentos duplicados silenciosos próprios do `google.script.run`.
 
 ## D-5: Datas — retroativa só em período aberto; futura bloqueada
 

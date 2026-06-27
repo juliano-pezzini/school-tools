@@ -1,11 +1,18 @@
 # State
 
-**Last Updated:** 2026-06-25
-**Current Work:** **M1 iniciado** — feature **Lançamentos & Saldo**: spec + context + **design** prontos (`.specs/features/lancamentos-saldo/`, design 2026-06-25/26). Arquitetura: web app Apps Script em `cash-flow/` reusando o seam de autorização do `m0-roles` e helpers pt-BR/agregação do `m0-reports`; saldo recalculado sob demanda; LockService nas escritas; abas Lancamentos/Config/Fechamentos/Usuarios. Próximo: **Tasks** (quebra atômica + testes). Em paralelo, B-002 (Robô da Biblioteca/MSTECH) aguarda infos da bibliotecária. M0 técnico fechado para a stack A.
+**Last Updated:** 2026-06-26
+**Current Work:** **M1 — feature Lançamentos & Saldo**: spec v2 oficializada (AD-010) + design v2 + **tasks.md** prontos (`.specs/features/lancamentos-saldo/`). Plano: 16 tarefas em 4 fases (Foundation → lógica pura `cash-flow/logic.js` com Vitest → cola Apps Script `Code.gs` → UI). Estrutura: lógica pura testável em Node (`logic.js`) + cola Apps Script (Sheets/Lock/Session/Cache) em `Code.gs`; 5 abas (Lancamentos/Config/Fechamentos/Usuarios/Auditoria); soft-delete + auditoria append-only + idempotência por clientToken. Próximo: **Execute** (4 fases → oferecer 1 worker por fase; aguardando aprovação das tasks + escolha Vitest/Jest). Em paralelo, B-002 (Robô da Biblioteca/MSTECH) aguarda infos da bibliotecária. M0 técnico fechado para a stack A.
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-010: Lançamentos & Saldo — spec v2 oficializada (segunda leitura) (2026-06-26)
+
+**Decision:** Oficializar uma **segunda leitura "olhos novos"** da feature como spec canon (`.specs/features/lancamentos-saldo/spec.md`), substituindo o rascunho v1. Três decisões reabertas e confirmadas: (1) **exclusão lógica (soft-delete)** em vez de exclusão física; (2) **trilha de auditoria append-only** (aba `Auditoria`) além do "quem/quando da última alteração"; (3) **idempotência de gravação** via `clientToken` (anti-duplo-clique). Mais endurecimentos de precisão (sinal/zero da abertura, desempate de ordenação, transições/idempotência de fechar-reabrir, normalização de categoria, limites de campo/teto de valor, abertura indefinida, gotcha do e-mail vazio).
+**Reason:** A v1 divergia da lição "auditoria append-only" do STATE e não cobria duplicação silenciosa por `google.script.run` nem vários casos de borda. A v2 mantém a UX simples para o tesoureiro e fortalece a prestação de contas.
+**Trade-off:** Soft-delete + aba `Auditoria` adicionam um pouco de schema/escrita; idempotência exige token no cliente. Custo baixo na stack Sheets, benefício alto em confiabilidade/auditoria.
+**Impact:** **Supera a D-4 do AD-009** (correção por exclusão física rastreando só a última alteração). Guia o novo design (aba `Auditoria`, soft-delete, dedup por token) e os IDs novos LANC-10/11/12.
 
 ### AD-009: Lançamentos & Saldo — decisões de escopo do MVP do caixa (2026-06-25)
 
@@ -13,6 +20,7 @@
 **Reason:** Simplicidade para o tesoureiro não-técnico, mantendo proteção da prestação de contas via barreira de fechamento.
 **Trade-off:** Edição/exclusão diverge da lição "auditoria append-only" do STATE.md. Mitigado por: campos de última alteração + o fechamento mensal como fronteira de imutabilidade (a auditoria forte vive no fechamento, não no histórico por linha).
 **Impact:** Guia o design da feature (modelo Sheets com registro de meses fechados, guard server-side de fechamento/data reaproveitando o padrão `requireRole_` do spike `m0-roles`).
+**Status:** Parcialmente **superado por AD-010** — a D-4 (correção por exclusão física rastreando só a última alteração) foi substituída por soft-delete + trilha de auditoria append-only. As demais decisões (caixa único, abertura única, categoria autocomplete, fechamento mensal, regras de data) permanecem ativas.
 
 ### AD-001: Arquitetura guiada por custo e baixa manutenção (2026-06-20)
 
