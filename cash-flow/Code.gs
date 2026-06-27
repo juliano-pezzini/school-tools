@@ -493,3 +493,87 @@ function setOpeningBalance(opts) {
     return { ok: true };
   });
 }
+
+// ===========================================================================
+// Fechamento service — fechar/reabrir mês (transições delegadas à lógica pura)
+// ===========================================================================
+
+/** Localiza a linha de Fechamentos de um período; null se inexistente (= aberto). */
+function findFechamentoRow_(periodo) {
+  var values = getSheet_(SH_FECH).getDataRange().getValues();
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][0]) === String(periodo)) {
+      return { row: i + 1, status: String(values[i][1]).toLowerCase() };
+    }
+  }
+  return null;
+}
+
+/** Lista os períodos atualmente fechados com quem/quando. LANC-07. */
+function listClosedPeriods() {
+  requireRole_(['admin', 'tesoureiro', 'leitor']);
+  var values = getSheet_(SH_FECH).getDataRange().getValues();
+  var out = [];
+  for (var i = 1; i < values.length; i++) {
+    if (!values[i][0]) continue;
+    if (String(values[i][1]).toLowerCase() !== 'fechado') continue;
+    out.push({
+      periodo: String(values[i][0]),
+      status: 'fechado',
+      fechadoPor: String(values[i][2] || ''),
+      fechadoEm: String(values[i][3] || ''),
+      reabertoPor: String(values[i][4] || ''),
+      reabertoEm: String(values[i][5] || '')
+    });
+  }
+  return out;
+}
+
+/**
+ * Fecha um mês `<=` corrente. Mês futuro é rejeitado pela decisão pura; já
+ * fechado é no-op idempotente. Cria/atualiza a linha e audita o fechamento.
+ * LANC-07.
+ */
+function closeMonth(periodo) {
+  var who = requireRole_(['admin', 'tesoureiro']);
+  periodo = String(periodo);
+  return withLock_(function () {
+    var found = findFechamentoRow_(periodo);
+    var status = found ? found.status : 'aberto';
+    var dec = closeDecision_(periodo, status, mesCorrente_()); // lança se mês futuro
+    if (!dec.changed) return { ok: true, jaFechado: true };
+
+    var stamp = nowStamp_();
+    var sheet = getSheet_(SH_FECH);
+    if (found) {
+      sheet.getRange(found.row, 2).setValue('fechado');
+      sheet.getRange(found.row, 3, 1, 2).setValues([[who.email, stamp]]);
+    } else {
+      sheet.appendRow([periodo, 'fechado', who.email, stamp, '', '']);
+    }
+    appendAudit_('editar', 'fechamento:' + periodo, JSON.stringify({ acao: 'fechar', periodo: periodo }));
+    return { ok: true };
+  });
+}
+
+/**
+ * Reabre um mês fechado (já aberto = no-op idempotente). Grava
+ * ReabertoPor/ReabertoEm preservando o registro de fechamento, e audita. LANC-08.
+ */
+function reopenMonth(periodo) {
+  var who = requireRole_(['admin', 'tesoureiro']);
+  periodo = String(periodo);
+  return withLock_(function () {
+    var found = findFechamentoRow_(periodo);
+    var status = found ? found.status : 'aberto';
+    var dec = reopenDecision_(periodo, status);
+    if (!dec.changed) return { ok: true, jaAberto: true };
+
+    var stamp = nowStamp_();
+    var sheet = getSheet_(SH_FECH);
+    sheet.getRange(found.row, 2).setValue('aberto');
+    sheet.getRange(found.row, 5, 1, 2).setValues([[who.email, stamp]]);
+    appendAudit_('editar', 'fechamento:' + periodo, JSON.stringify({ acao: 'reabrir', periodo: periodo }));
+    return { ok: true };
+  });
+}
