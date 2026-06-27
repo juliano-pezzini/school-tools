@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<!--
+  ===========================================================================
+  SMOKE DE DEPLOY (checklist manual — o agente não consegue implantar)
+  ===========================================================================
+  Pré-requisito: `clasp push` + Implantar como Web App
+  (Executar como: EU/implantador; Acesso: DOMÍNIO). Abrir a URL /exec.
+
+  1.  Abrir o Web App: a 1ª execução cria a planilha "Fluxo de Caixa — APP (dados)"
+      com as 5 abas (Lancamentos, Config, Fechamentos, Usuarios, Auditoria) e
+      promove você a admin (bootstrap anti-lockout).
+  2.  Painel "Saldo": deve sinalizar "abertura não definida" e mostrar R$ 0,00.
+  3.  Registrar abertura R$ 1.000,00 (data não-futura) → saldo passa a R$ 1.000,00;
+      o formulário de abertura fica desabilitado ("só uma vez"); 2ª tentativa é
+      bloqueada com mensagem pt-BR.
+  4.  Lançar ENTRADA R$ 200,00 e SAÍDA R$ 50,00 → lista mostra os dois; saldo
+      R$ 1.150,00. Dar duplo-clique no "Adicionar" não cria duplicata (clientToken).
+  5.  Editar a entrada (mudar valor) → saldo recalcula; conferir AlteradoPor/Em na
+      aba Lancamentos e um registro novo na aba Auditoria (ação=editar).
+  6.  Excluir (soft-delete) a saída → some da lista, saldo ajusta; aba Lancamentos
+      mostra Excluido=true + ExcluidoPor/Em; aba Auditoria registra (excluir).
+  7.  Fechar o mês corrente → tentar lançar/editar com data nesse mês é bloqueado
+      ("período MM/AAAA está fechado"); fechar de novo só avisa "já fechado".
+  8.  Reabrir o mês → lançar/editar volta a funcionar; aba Fechamentos preserva o
+      registro de fechamento + ReabertoPor/Em.
+  9.  Testar categoria: usar "Doação", depois digitar "do" em novo lançamento e ver
+      a sugestão única no autocomplete.
+  10. Conferir saldo negativo (forçar saída > saldo) → exibido em vermelho, sem
+      bloquear. Conferir as 5 abas e linhas na Auditoria.
+  ===========================================================================
+-->
+<html lang="pt-BR">
+  <head>
+    <base target="_top" />
+    <meta charset="utf-8" />
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        margin: 0 auto; padding: 16px; max-width: 920px;
+        background: #f4f6f8; color: #1a1a1a;
+      }
+      h1 { font-size: 1.25rem; margin: 0 0 4px; }
+      h2 { font-size: 1.02rem; margin: 2px 0 12px; }
+      .muted { color: #666; font-size: 0.85rem; }
+      .card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+      .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+      .grow { flex: 1; min-width: 130px; }
+      label { font-size: .72rem; color: #666; text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: 4px; }
+      input, select, button, textarea {
+        padding: 10px 12px; font-size: .95rem; border-radius: 8px;
+        border: 1px solid #cfd8dc; background: #fff; font-family: inherit; width: 100%;
+      }
+      textarea { resize: vertical; min-height: 42px; }
+      button { border: 0; background: #1565c0; color: #fff; font-weight: 600; cursor: pointer; width: auto; }
+      button:active { background: #0d47a1; }
+      button.danger { background: #c5221f; }
+      button.secondary { background: #455a64; }
+      button.ghost { background: #eceff1; color: #37474f; }
+      button:disabled { opacity: .5; cursor: not-allowed; }
+      .saldo-num { font-size: 1.9rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+      .saldo-num.neg { color: #c5221f; }
+      .totais { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; }
+      .totais div b { font-variant-numeric: tabular-nums; }
+      .warn { background: #fff8e1; border: 1px solid #ffe082; color: #795548; padding: 10px 12px; border-radius: 8px; margin-top: 10px; font-size: .9rem; }
+      table { width: 100%; border-collapse: collapse; font-size: .86rem; margin-top: 10px; }
+      th, td { padding: 7px 8px; border-bottom: 1px solid #eceff1; text-align: left; }
+      th { font-size: .7rem; text-transform: uppercase; color: #666; }
+      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+      .tag { font-size: .68rem; padding: 2px 7px; border-radius: 999px; font-weight: 600; }
+      .tag.entrada { background: #e6f4ea; color: #137333; }
+      .tag.saida { background: #fce8e6; color: #c5221f; }
+      .result { padding: 10px 12px; border-radius: 8px; margin-top: 10px; font-size: .88rem; font-weight: 600; }
+      .ok { background: #e6f4ea; color: #137333; }
+      .err { background: #fce8e6; color: #c5221f; }
+      .hidden { display: none; }
+      .actions button { padding: 5px 9px; font-size: .8rem; margin-right: 4px; }
+      .field { margin-bottom: 8px; }
+      .pill { display: inline-block; font-size: .72rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: #e8eaf6; color: #283593; }
+    </style>
+  </head>
+  <body>
+    <h1>Fluxo de Caixa — APP</h1>
+    <p class="muted">
+      Registre entradas e saídas, acompanhe o <b>saldo corrente</b> e feche os meses
+      conferidos. Toda validação é refeita no servidor; a tela é só conveniência.
+    </p>
+
+    <!-- ===== Saldo ===== -->
+    <div class="card">
+      <h2>Saldo corrente</h2>
+      <div id="saldoNum" class="saldo-num">—</div>
+      <div id="saldoTotais" class="totais muted"></div>
+      <div id="saldoWarn"></div>
+    </div>
+
+    <!-- ===== Saldo de abertura ===== -->
+    <div class="card">
+      <h2>Saldo de abertura</h2>
+      <p class="muted" style="margin-top:0;">Registrado <b>uma única vez</b>. Aceita valor ≥ 0 e data não-futura.</p>
+      <div class="row">
+        <div class="grow">
+          <label for="abValor">Valor de abertura (R$)</label>
+          <input id="abValor" inputmode="decimal" placeholder="Ex.: 1.000,00" />
+        </div>
+        <div class="grow">
+          <label for="abData">Data de abertura</label>
+          <input id="abData" type="date" />
+        </div>
+        <div>
+          <button id="abBtn" onclick="saveAbertura()">Registrar abertura</button>
+        </div>
+      </div>
+      <div id="abResult"></div>
+    </div>
+
+    <!-- ===== Lançamento (criar/editar) ===== -->
+    <div class="card">
+      <h2 id="lancTitulo">Novo lançamento</h2>
+      <div class="row">
+        <div style="min-width:130px;">
+          <label for="lTipo">Tipo</label>
+          <select id="lTipo">
+            <option value="entrada">Entrada</option>
+            <option value="saida">Saída</option>
+          </select>
+        </div>
+        <div style="min-width:150px;">
+          <label for="lData">Data</label>
+          <input id="lData" type="date" />
+        </div>
+        <div style="min-width:130px;">
+          <label for="lValor">Valor (R$)</label>
+          <input id="lValor" inputmode="decimal" placeholder="Ex.: 200,00" />
+        </div>
+        <div class="grow">
+          <label for="lCategoria">Categoria</label>
+          <input id="lCategoria" list="catList" placeholder="Ex.: Doação" maxlength="60" />
+          <datalist id="catList"></datalist>
+        </div>
+      </div>
+      <div class="field" style="margin-top:8px;">
+        <label for="lDescricao">Descrição</label>
+        <textarea id="lDescricao" maxlength="280" placeholder="Descrição do lançamento"></textarea>
+      </div>
+      <div class="row" style="margin-top:4px;">
+        <button id="lSalvar" onclick="submitLancamento()">Adicionar</button>
+        <button id="lCancelar" class="ghost hidden" onclick="resetLancamentoForm()">Cancelar edição</button>
+      </div>
+      <div id="lResult"></div>
+    </div>
+
+    <!-- ===== Lista + filtros ===== -->
+    <div class="card">
+      <h2>Lançamentos</h2>
+      <div class="row">
+        <div style="min-width:150px;">
+          <label for="fMes">Mês</label>
+          <input id="fMes" type="month" />
+        </div>
+        <div style="min-width:140px;">
+          <label for="fTipo">Tipo</label>
+          <select id="fTipo">
+            <option value="">Todos</option>
+            <option value="entrada">Entrada</option>
+            <option value="saida">Saída</option>
+          </select>
+        </div>
+        <div class="grow">
+          <label for="fCategoria">Categoria</label>
+          <input id="fCategoria" list="catList" placeholder="Qualquer categoria" />
+        </div>
+        <div>
+          <button class="secondary" onclick="loadLancamentos()">Filtrar</button>
+          <button class="ghost" onclick="limparFiltro()">Limpar</button>
+        </div>
+      </div>
+      <div id="listResult"></div>
+      <table id="listTable" class="hidden">
+        <thead>
+          <tr><th>Data</th><th>Tipo</th><th>Categoria</th><th class="num">Valor</th><th>Descrição</th><th>Ações</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- ===== Fechamento ===== -->
+    <div class="card">
+      <h2>Fechamento de mês</h2>
+      <p class="muted" style="margin-top:0;">Um mês fechado bloqueia lançar/editar/excluir naquele período (revalidado no servidor).</p>
+      <div class="row">
+        <div style="min-width:160px;">
+          <label for="cMes">Mês (competência)</label>
+          <input id="cMes" type="month" />
+        </div>
+        <div>
+          <button onclick="fecharMes()">Fechar mês</button>
+        </div>
+      </div>
+      <div id="fechResult"></div>
+      <table id="fechTable" class="hidden">
+        <thead>
+          <tr><th>Período</th><th>Status</th><th>Fechado por</th><th>Fechado em</th><th>Ações</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <script>
+      // ---- formatação / helpers ----
+      var BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+      function el(id){ return document.getElementById(id); }
+      function fmtBRL(v){ return BRL.format(Number(v) || 0); }
+      function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+      function show(id,on){ el(id).classList.toggle('hidden', !on); }
+      function box(id,msg,cls){ el(id).innerHTML = msg ? '<div class="result '+cls+'">'+msg+'</div>' : ''; }
+
+      // Gerador de UUID (idempotência): crypto.randomUUID com fallback.
+      function uuid(){
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c){
+          var r = (Math.random()*16)|0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
+        });
+      }
+
+      // Date (do servidor) → 'yyyy-MM-dd' para o <input type=date>.
+      function dateToInput(d){
+        if (!d) return '';
+        var dt = (d instanceof Date) ? d : new Date(d);
+        if (isNaN(dt.getTime())) return '';
+        var mm = String(dt.getMonth()+1).padStart(2,'0');
+        var dd = String(dt.getDate()).padStart(2,'0');
+        return dt.getFullYear()+'-'+mm+'-'+dd;
+      }
+      // Date (do servidor) → 'dd/MM/yyyy' para exibir.
+      function dateToBR(d){
+        var iso = dateToInput(d);
+        if (!iso) return '';
+        var p = iso.split('-');
+        return p[2]+'/'+p[1]+'/'+p[0];
+      }
+      // '<input type=date>' (yyyy-MM-dd) → 'dd/MM/yyyy' para o servidor (parseDateBR_).
+      function inputToBR(iso){
+        if (!iso) return '';
+        var p = String(iso).split('-');
+        if (p.length !== 3) return '';
+        return p[2]+'/'+p[1]+'/'+p[0];
+      }
+
+      // ---- estado da UI ----
+      var editId = null;          // id do lançamento em edição (null = criação)
+      var clientToken = uuid();   // token de idempotência da criação atual
+
+      // ===== Saldo =====
+      function loadSaldo(){
+        google.script.run
+          .withSuccessHandler(renderSaldo)
+          .withFailureHandler(function(e){ box('saldoWarn', esc(e.message), 'err'); })
+          .getCashState();
+      }
+      function renderSaldo(s){
+        var neg = Number(s.saldoAtual) < 0;
+        el('saldoNum').textContent = fmtBRL(s.saldoAtual);
+        el('saldoNum').classList.toggle('neg', neg);
+        el('saldoTotais').innerHTML =
+          '<div>Abertura: <b>'+fmtBRL(s.saldoAbertura)+'</b></div>'+
+          '<div>Entradas: <b>'+fmtBRL(s.totalEntradas)+'</b></div>'+
+          '<div>Saídas: <b>'+fmtBRL(s.totalSaidas)+'</b></div>';
+        var w = '';
+        if (!s.aberturaDefinida) w += '<div class="warn">⚠️ Saldo de abertura não definido — tratado como R$ 0,00. Registre a abertura abaixo.</div>';
+        if (neg) w += '<div class="warn">⚠️ Saldo negativo.</div>';
+        el('saldoWarn').innerHTML = w;
+        // Reflete a regra "só uma vez" no formulário de abertura.
+        var defined = !!s.aberturaDefinida;
+        el('abValor').disabled = defined;
+        el('abData').disabled = defined;
+        el('abBtn').disabled = defined;
+        if (defined) box('abResult', 'Abertura já registrada ('+fmtBRL(s.saldoAbertura)+'). Para corrigir, edite o registro com o período aberto.', 'ok');
+      }
+
+      // ===== Abertura =====
+      function saveAbertura(){
+        var btn = el('abBtn');
+        btn.disabled = true;
+        var opts = { valor: el('abValor').value, data: inputToBR(el('abData').value) };
+        google.script.run
+          .withSuccessHandler(function(){ box('abResult','✅ Saldo de abertura registrado.','ok'); loadSaldo(); })
+          .withFailureHandler(function(e){ btn.disabled = false; box('abResult','❌ '+esc(e.message),'err'); })
+          .setOpeningBalance(opts);
+      }
+
+      // ===== Categorias (autocomplete) =====
+      function loadCategorias(){
+        google.script.run
+          .withSuccessHandler(function(cats){
+            el('catList').innerHTML = (cats || []).map(function(c){ return '<option value="'+esc(c)+'"></option>'; }).join('');
+          })
+          .withFailureHandler(function(){ /* autocomplete é opcional */ })
+          .listCategorias();
+      }
+
+      // ===== Lançamento (criar/editar) =====
+      function buildItem(){
+        return {
+          tipo: el('lTipo').value,
+          data: inputToBR(el('lData').value),
+          valor: el('lValor').value,
+          categoria: el('lCategoria').value,
+          descricao: el('lDescricao').value
+        };
+      }
+      function submitLancamento(){
+        var btn = el('lSalvar');
+        btn.disabled = true;                 // anti-duplo-clique (complementa idempotência do servidor)
+        var item = buildItem();
+        if (editId) {
+          google.script.run
+            .withSuccessHandler(function(){ btn.disabled = false; box('lResult','✅ Lançamento atualizado.','ok'); resetLancamentoForm(); afterWrite(); })
+            .withFailureHandler(function(e){ btn.disabled = false; box('lResult','❌ '+esc(e.message),'err'); })
+            .editLancamento(editId, item);
+        } else {
+          google.script.run
+            .withSuccessHandler(function(){
+              btn.disabled = false;
+              clientToken = uuid();          // rotaciona o token após sucesso
+              box('lResult','✅ Lançamento adicionado.','ok');
+              el('lValor').value = ''; el('lDescricao').value = '';
+              afterWrite();
+            })
+            .withFailureHandler(function(e){ btn.disabled = false; box('lResult','❌ '+esc(e.message),'err'); })
+            .addLancamento(item, clientToken); // mesmo token em retry → dedupe
+        }
+      }
+      function startEdit(r){
+        editId = r.Id;
+        clientToken = uuid();
+        el('lancTitulo').textContent = 'Editar lançamento';
+        el('lTipo').value = r.Tipo;
+        el('lData').value = dateToInput(r.Data);
+        el('lValor').value = String(r.Valor).replace('.', ',');
+        el('lCategoria').value = r.Categoria || '';
+        el('lDescricao').value = r.Descricao || '';
+        el('lSalvar').textContent = 'Salvar alterações';
+        show('lCancelar', true);
+        box('lResult', '', '');
+        el('lancTitulo').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      function resetLancamentoForm(){
+        editId = null;
+        clientToken = uuid();                // novo token a cada abertura do formulário
+        el('lancTitulo').textContent = 'Novo lançamento';
+        el('lSalvar').textContent = 'Adicionar';
+        el('lValor').value = ''; el('lCategoria').value = ''; el('lDescricao').value = '';
+        el('lTipo').value = 'entrada';
+        show('lCancelar', false);
+      }
+      function afterWrite(){ loadSaldo(); loadCategorias(); loadLancamentos(); }
+
+      // ===== Lista + filtros =====
+      function currentFiltro(){
+        return {
+          mes: el('fMes').value || '',       // <input type=month> já dá 'YYYY-MM'
+          tipo: el('fTipo').value || '',
+          categoria: el('fCategoria').value || ''
+        };
+      }
+      function limparFiltro(){
+        el('fMes').value = ''; el('fTipo').value = ''; el('fCategoria').value = '';
+        loadLancamentos();
+      }
+      function loadLancamentos(){
+        google.script.run
+          .withSuccessHandler(renderLista)
+          .withFailureHandler(function(e){ show('listTable', false); box('listResult', esc(e.message), 'err'); })
+          .listLancamentos(currentFiltro());
+      }
+      var ROWS = {};
+      function renderLista(rows){
+        ROWS = {};
+        if (!rows || !rows.length){
+          show('listTable', false);
+          box('listResult', 'Nenhum lançamento para os filtros atuais.', 'ok');
+          return;
+        }
+        box('listResult', '', '');
+        show('listTable', true);
+        el('listTable').querySelector('tbody').innerHTML = rows.map(function(r){
+          ROWS[r.Id] = r;
+          return '<tr>'+
+            '<td>'+esc(dateToBR(r.Data))+'</td>'+
+            '<td><span class="tag '+esc(r.Tipo)+'">'+esc(r.Tipo)+'</span></td>'+
+            '<td>'+esc(r.Categoria)+'</td>'+
+            '<td class="num">'+fmtBRL(r.Valor)+'</td>'+
+            '<td>'+esc(r.Descricao)+'</td>'+
+            '<td class="actions">'+
+              '<button class="ghost" onclick="onEdit(\''+esc(r.Id)+'\')">editar</button>'+
+              '<button class="danger" onclick="onDelete(\''+esc(r.Id)+'\')">excluir</button>'+
+            '</td></tr>';
+        }).join('');
+      }
+      function onEdit(id){ if (ROWS[id]) startEdit(ROWS[id]); }
+      function onDelete(id){
+        if (!window.confirm('Excluir este lançamento? (exclusão lógica, auditada)')) return;
+        google.script.run
+          .withSuccessHandler(function(){ box('listResult','✅ Lançamento excluído.','ok'); afterWrite(); })
+          .withFailureHandler(function(e){ box('listResult','❌ '+esc(e.message),'err'); })
+          .deleteLancamento(id);
+      }
+
+      // ===== Fechamento =====
+      function loadFechamentos(){
+        google.script.run
+          .withSuccessHandler(renderFechamentos)
+          .withFailureHandler(function(e){ show('fechTable', false); box('fechResult', esc(e.message), 'err'); })
+          .listClosedPeriods();
+      }
+      function periodoBR(p){
+        var x = String(p).split('-');
+        return (x.length === 2) ? (x[1]+'/'+x[0]) : p;
+      }
+      function renderFechamentos(list){
+        if (!list || !list.length){
+          show('fechTable', false);
+          box('fechResult', 'Nenhum mês fechado no momento.', 'ok');
+          return;
+        }
+        box('fechResult', '', '');
+        show('fechTable', true);
+        el('fechTable').querySelector('tbody').innerHTML = list.map(function(p){
+          return '<tr>'+
+            '<td>'+esc(periodoBR(p.periodo))+'</td>'+
+            '<td><span class="pill">'+esc(p.status)+'</span></td>'+
+            '<td><small>'+esc(p.fechadoPor)+'</small></td>'+
+            '<td><small>'+esc(p.fechadoEm)+'</small></td>'+
+            '<td class="actions"><button class="secondary" onclick="reabrirMes(\''+esc(p.periodo)+'\')">reabrir</button></td>'+
+          '</tr>';
+        }).join('');
+      }
+      function fecharMes(){
+        var periodo = el('cMes').value;     // 'YYYY-MM'
+        if (!periodo){ box('fechResult','Informe o mês a fechar.','err'); return; }
+        google.script.run
+          .withSuccessHandler(function(res){
+            box('fechResult', res && res.jaFechado ? 'ℹ️ O mês já estava fechado.' : '✅ Mês fechado.', 'ok');
+            loadFechamentos(); afterWrite();
+          })
+          .withFailureHandler(function(e){ box('fechResult','❌ '+esc(e.message),'err'); })
+          .closeMonth(periodo);
+      }
+      function reabrirMes(periodo){
+        google.script.run
+          .withSuccessHandler(function(res){
+            box('fechResult', res && res.jaAberto ? 'ℹ️ O mês já estava aberto.' : '✅ Mês reaberto.', 'ok');
+            loadFechamentos(); afterWrite();
+          })
+          .withFailureHandler(function(e){ box('fechResult','❌ '+esc(e.message),'err'); })
+          .reopenMonth(periodo);
+      }
+
+      // ===== bootstrap =====
+      resetLancamentoForm();
+      loadSaldo();
+      loadCategorias();
+      loadLancamentos();
+      loadFechamentos();
+    </script>
+  </body>
+</html>

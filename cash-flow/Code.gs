@@ -52,6 +52,22 @@ function nowStamp_() {
 }
 
 // ===========================================================================
+// Web entry — serve a UI pt-BR (Index.html). Padrão doGet dos spikes.
+// ===========================================================================
+
+/**
+ * Ponto de entrada do Web App: devolve a página única `Index.html`. As funções
+ * de negócio são chamadas a partir dela via `google.script.run`. Mantém o padrão
+ * dos spikes (título + viewport) e libera o embed (XFrameOptionsMode.ALLOWALL).
+ */
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('Index')
+    .setTitle('Fluxo de Caixa — APP')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+// ===========================================================================
 // Camada de dados (Sheets) — bootstrap da planilha + 5 abas
 // ===========================================================================
 
