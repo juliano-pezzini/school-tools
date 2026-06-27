@@ -271,6 +271,52 @@ function computeCategorias_(rows) {
   return out.map(function (e) { return e.grafia; });
 }
 
+// ===========================================================================
+// T6 — Cálculo de saldo (abertura + corrente)
+// ===========================================================================
+
+/** Arredonda para 2 casas, evitando ruído de ponto flutuante. */
+function round2_(n) {
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * Estado do caixa a partir da fonte (recálculo sob demanda).
+ * `config` pode trazer `saldoAbertura` (número ≥ 0). Se a abertura não estiver
+ * definida (config nulo ou sem `saldoAbertura` numérico), trata como 0 e marca
+ * `aberturaDefinida=false`. Soma só lançamentos não `Excluido`. Saldo negativo
+ * é permitido (retornado, não bloqueado).
+ * Retorna `{ aberturaDefinida, saldoAbertura, totalEntradas, totalSaidas, saldoAtual }`.
+ */
+function computeCashState_(config, rows) {
+  rows = rows || [];
+  var abertura = 0;
+  var aberturaDefinida = false;
+  if (config != null && config.saldoAbertura != null && isFinite(Number(config.saldoAbertura))) {
+    abertura = Number(config.saldoAbertura);
+    aberturaDefinida = true;
+  }
+  var totalEntradas = 0;
+  var totalSaidas = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    if (!row || row.Excluido === true) continue;
+    var valor = Number(row.Valor);
+    if (!isFinite(valor)) continue;
+    if (row.Tipo === 'entrada') totalEntradas += valor;
+    else if (row.Tipo === 'saida') totalSaidas += valor;
+  }
+  totalEntradas = round2_(totalEntradas);
+  totalSaidas = round2_(totalSaidas);
+  return {
+    aberturaDefinida: aberturaDefinida,
+    saldoAbertura: round2_(abertura),
+    totalEntradas: totalEntradas,
+    totalSaidas: totalSaidas,
+    saldoAtual: round2_(abertura + totalEntradas - totalSaidas)
+  };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     formatBRL_: formatBRL_,
@@ -284,6 +330,7 @@ if (typeof module !== 'undefined' && module.exports) {
     assertNotFuture_: assertNotFuture_,
     assertPeriodOpen_: assertPeriodOpen_,
     normalizeCategoryKey_: normalizeCategoryKey_,
-    computeCategorias_: computeCategorias_
+    computeCategorias_: computeCategorias_,
+    computeCashState_: computeCashState_
   };
 }
