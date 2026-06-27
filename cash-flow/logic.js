@@ -227,6 +227,50 @@ function assertPeriodOpen_(date, closedPeriods) {
   return true;
 }
 
+// ===========================================================================
+// T5 — Normalização e listagem de categorias
+// ===========================================================================
+
+/**
+ * Chave normalizada de categoria: sem diferenciar maiúsculas/minúsculas,
+ * acentos (incl. cedilha) ou espaços nas pontas. `normalize('NFD')` é parte do
+ * core JS (V8-safe), não depende de `Intl`.
+ */
+function normalizeCategoryKey_(s) {
+  return String(s == null ? '' : s)
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+/**
+ * Lista de categorias distintas para autocomplete: agrupa por chave
+ * normalizada, mantém a 1ª grafia usada, ignora lançamentos `Excluido`,
+ * e ordena pela chave normalizada (determinístico).
+ */
+function computeCategorias_(rows) {
+  rows = rows || [];
+  var seen = {};
+  var out = [];
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    if (!row || row.Excluido === true) continue;
+    var grafia = String(row.Categoria == null ? '' : row.Categoria).trim();
+    if (grafia === '') continue;
+    var key = normalizeCategoryKey_(grafia);
+    if (Object.prototype.hasOwnProperty.call(seen, key)) continue;
+    seen[key] = true;
+    out.push({ key: key, grafia: grafia });
+  }
+  out.sort(function (a, b) {
+    if (a.key < b.key) return -1;
+    if (a.key > b.key) return 1;
+    return 0;
+  });
+  return out.map(function (e) { return e.grafia; });
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     formatBRL_: formatBRL_,
@@ -238,6 +282,8 @@ if (typeof module !== 'undefined' && module.exports) {
     sanitizeLancamento_: sanitizeLancamento_,
     assertLimits_: assertLimits_,
     assertNotFuture_: assertNotFuture_,
-    assertPeriodOpen_: assertPeriodOpen_
+    assertPeriodOpen_: assertPeriodOpen_,
+    normalizeCategoryKey_: normalizeCategoryKey_,
+    computeCategorias_: computeCategorias_
   };
 }
