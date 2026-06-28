@@ -116,8 +116,8 @@
           </select>
         </div>
         <div style="min-width:150px;">
-          <label for="lData">Data</label>
-          <input id="lData" type="date" />
+          <label for="lData">Data (dd/mm/aaaa)</label>
+          <input id="lData" type="text" placeholder="dd/mm/aaaa" maxlength="10" />
         </div>
         <div style="min-width:130px;">
           <label for="lValor">Valor (R$)</label>
@@ -145,8 +145,8 @@
       <h2>Lançamentos</h2>
       <div class="row">
         <div style="min-width:150px;">
-          <label for="fMes">Mês</label>
-          <input id="fMes" type="month" />
+          <label for="fMes">Mês (mm/aaaa)</label>
+          <input id="fMes" type="text" placeholder="mm/aaaa" maxlength="7" />
         </div>
         <div style="min-width:140px;">
           <label for="fTipo">Tipo</label>
@@ -180,8 +180,8 @@
       <p class="muted" style="margin-top:0;">Um mês fechado bloqueia lançar/editar/excluir naquele período (revalidado no servidor).</p>
       <div class="row">
         <div style="min-width:160px;">
-          <label for="cMes">Mês (competência)</label>
-          <input id="cMes" type="month" />
+          <label for="cMes">Mês — competência (mm/aaaa)</label>
+          <input id="cMes" type="text" placeholder="mm/aaaa" maxlength="7" />
         </div>
         <div>
           <button onclick="fecharMes()">Fechar mês</button>
@@ -206,8 +206,8 @@
           <input id="abValor" inputmode="decimal" placeholder="Ex.: 1.000,00" />
         </div>
         <div class="field">
-          <label for="abData">Data de abertura</label>
-          <input id="abData" type="date" />
+          <label for="abData">Data de abertura (dd/mm/aaaa)</label>
+          <input id="abData" type="text" placeholder="dd/mm/aaaa" maxlength="10" />
         </div>
         <div id="abResult"></div>
         <div class="modal-footer">
@@ -252,12 +252,12 @@
         var p = iso.split('-');
         return p[2]+'/'+p[1]+'/'+p[0];
       }
-      // '<input type=date>' (yyyy-MM-dd) → 'dd/MM/yyyy' para o servidor (parseDateBR_).
-      function inputToBR(iso){
-        if (!iso) return '';
-        var p = String(iso).split('-');
-        if (p.length !== 3) return '';
-        return p[2]+'/'+p[1]+'/'+p[0];
+      // Converte 'mm/aaaa' (input BR) → 'YYYY-MM' (chave do servidor).
+      function mesBRtoKey(v){
+        if (!v) return '';
+        var p = String(v).split('/');
+        if (p.length !== 2) return '';
+        return p[1]+'-'+p[0];
       }
 
       // ---- estado da UI ----
@@ -307,11 +307,8 @@
             abDefined = ob.definida;
             if (ob.definida) {
               el('abValor').value = String(ob.valor).replace('.', ',');
-              // ob.data is 'dd/MM/yyyy' — convert to yyyy-MM-dd for input
-              if (ob.data) {
-                var p = String(ob.data).split('/');
-                if (p.length === 3) el('abData').value = p[2]+'-'+p[1]+'-'+p[0];
-              }
+              // ob.data já vem dd/mm/aaaa do servidor
+              if (ob.data) el('abData').value = ob.data;
               el('abBtn').textContent = 'Salvar';
               el('abModalTitle').textContent = 'Editar saldo de abertura';
               show('abRemover', true);
@@ -324,7 +321,7 @@
       function saveAbertura(){
         var btn = el('abBtn');
         btn.disabled = true;
-        var opts = { valor: el('abValor').value, data: inputToBR(el('abData').value) };
+        var opts = { valor: el('abValor').value, data: el('abData').value };  // já em dd/mm/aaaa
         var fn = abDefined ? 'updateOpeningBalance' : 'setOpeningBalance';
         google.script.run
           .withSuccessHandler(function(){
@@ -376,7 +373,7 @@
       function buildItem(){
         return {
           tipo: el('lTipo').value,
-          data: inputToBR(el('lData').value),
+          data: el('lData').value,              // já em dd/mm/aaaa
           valor: el('lValor').value,
           categoria: el('lCategoria').value,
           descricao: el('lDescricao').value
@@ -415,7 +412,7 @@
         clientToken = uuid();
         el('lancTitulo').textContent = 'Editar lançamento';
         el('lTipo').value = r.Tipo;
-        el('lData').value = dateToInput(r.Data);
+        el('lData').value = dateToBR(r.Data);       // dd/mm/aaaa
         el('lValor').value = String(r.Valor).replace('.', ',');
         el('lCategoria').value = r.Categoria || '';
         el('lDescricao').value = r.Descricao || '';
@@ -438,7 +435,7 @@
       // ===== Lista + filtros =====
       function currentFiltro(){
         return {
-          mes: el('fMes').value || '',       // <input type=month> já dá 'YYYY-MM'
+          mes: mesBRtoKey(el('fMes').value),   // mm/aaaa → YYYY-MM
           tipo: el('fTipo').value || '',
           categoria: el('fCategoria').value || ''
         };
@@ -516,8 +513,8 @@
         }).join('');
       }
       function fecharMes(){
-        var periodo = el('cMes').value;     // 'YYYY-MM'
-        if (!periodo){ box('fechResult','Informe o mês a fechar.','err'); return; }
+        var periodo = mesBRtoKey(el('cMes').value);  // mm/aaaa → YYYY-MM
+        if (!periodo){ box('fechResult','Informe o mês a fechar (mm/aaaa).','err'); return; }
         google.script.run
           .withSuccessHandler(function(res){
             box('fechResult', res && res.jaFechado ? 'ℹ️ O mês já estava fechado.' : '✅ Mês fechado.', 'ok');
