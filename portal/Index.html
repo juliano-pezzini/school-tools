@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ferramentas Escolares</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    /* ── TOKENS ─────────────────────────────────────────────── */
+    :root {
+      --bg:        oklch(96.5% 0.006 256);
+      --surface:   #ffffff;
+      --fg:        oklch(17% 0.018 262);
+      --muted:     oklch(50% 0.014 258);
+      --border:    oklch(89% 0.009 256);
+      --muted-bg:  oklch(92% 0.006 256);
+
+      --brand:     oklch(22% 0.08 260);   /* deep slate nav */
+      --brand-md:  oklch(32% 0.09 258);
+      --brand-lt:  oklch(93% 0.018 256);
+
+      --accent:    oklch(58% 0.155 201);  /* teal CTA */
+      --accent-h:  oklch(48% 0.15  201);
+      --accent-bg: oklch(94% 0.035 201);
+
+      --ok:        oklch(54% 0.165 148);
+      --ok-bg:     oklch(94.5% 0.04 148);
+      --ok-dk:     oklch(36% 0.13  148);
+      --err:       oklch(51% 0.21   27);
+      --err-bg:    oklch(95.5% 0.04  27);
+      --err-dk:    oklch(38% 0.18   27);
+      --warn:      oklch(60% 0.17   68);
+      --warn-bg:   oklch(97% 0.04   76);
+      --warn-bdr:  oklch(85% 0.09   76);
+      --warn-dk:   oklch(38% 0.12   50);
+
+      --r:    10px;
+      --r-lg: 16px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font: 15px/1.6 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
+
+    /* ── HEADER ──────────────────────────────────────────────── */
+    .app-header {
+      background: var(--brand);
+      background-image: repeating-linear-gradient(
+        -55deg, transparent, transparent 20px,
+        rgba(255,255,255,0.018) 20px, rgba(255,255,255,0.018) 21px
+      );
+      color: #fff;
+      padding: 0 28px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+
+    .header-logo {
+      display: flex; align-items: center; gap: 12px;
+      text-decoration: none; color: #fff;
+    }
+    .header-logo svg { width: 36px; height: 36px; opacity: 0.9; }
+    .header-logo-name { font-size: 15px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; }
+    .header-logo-sub  { font-size: 11px; opacity: 0.5; font-weight: 400; letter-spacing: 0.02em; }
+
+    .header-spacer { flex: 1; }
+
+    .header-user {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; color: rgba(255,255,255,0.7);
+    }
+    .avatar {
+      width: 30px; height: 30px; background: var(--brand-md); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.92); letter-spacing: 0.02em;
+    }
+
+    /* ── MAIN ────────────────────────────────────────────────── */
+    .main { max-width: 1060px; margin: 0 auto; padding: 44px 24px 72px; }
+
+    /* ── HERO ────────────────────────────────────────────────── */
+    .hero { margin-bottom: 40px; }
+    .hero-icon { color: var(--accent); display: block; margin-bottom: 6px; }
+    .hero h1 {
+      font-size: 28px; font-weight: 800; letter-spacing: -0.025em;
+      color: var(--fg); line-height: 1.1;
+    }
+    .hero p { font-size: 15px; color: var(--muted); margin-top: 8px; max-width: 58ch; line-height: 1.55; }
+
+    /* ── SECTION LABEL ───────────────────────────────────────── */
+    .section-label {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+    }
+    .section-label span {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.09em; color: var(--muted); white-space: nowrap;
+    }
+    .section-label hr { flex: 1; border: 0; border-top: 1px solid var(--border); }
+
+    /* ── TOOLS GRID ──────────────────────────────────────────── */
+    .tools-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-bottom: 48px;
+    }
+    @media (max-width: 840px) { .tools-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 540px) { .tools-grid { grid-template-columns: 1fr; } }
+
+    .tool-card {
+      background: var(--surface);
+      border-radius: var(--r-lg);
+      border: 1px solid var(--border);
+      padding: 24px;
+      display: flex; flex-direction: column; gap: 14px;
+      transition: box-shadow 0.18s, transform 0.18s;
+    }
+    .tool-card:hover {
+      box-shadow: 0 8px 28px rgba(0,0,0,0.09);
+      transform: translateY(-2px);
+    }
+
+    .tool-icon-wrap {
+      width: 48px; height: 48px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .tool-icon-wrap svg { width: 26px; height: 26px; stroke-width: 1.6; }
+    .icon-teal  { background: var(--accent-bg); color: var(--accent); }
+    .icon-slate { background: var(--brand-lt);  color: var(--brand); }
+    .icon-green { background: var(--ok-bg);     color: var(--ok); }
+
+    .tool-name { font-size: 17px; font-weight: 700; letter-spacing: -0.015em; }
+    .tool-desc { font-size: 13.5px; color: var(--muted); line-height: 1.55; flex: 1; }
+
+    .tool-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      padding-top: 4px;
+    }
+
+    /* ── BADGES ──────────────────────────────────────────────── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    }
+    .badge-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+    .badge-ok    { background: var(--ok-bg);   color: var(--ok-dk); }
+    .badge-warn  { background: var(--warn-bg); color: var(--warn-dk); }
+    .badge-muted { background: var(--muted-bg); color: var(--muted); }
+
+    /* ── BUTTONS ─────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 9px 18px; border-radius: var(--r);
+      font-size: 13.5px; font-weight: 600; letter-spacing: 0.01em;
+      border: 0; cursor: pointer; text-decoration: none; font-family: inherit;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-h); }
+    .btn-outline {
+      background: transparent; color: var(--accent);
+      border: 1.5px solid oklch(82% 0.06 201);
+    }
+    .btn-outline:hover { background: var(--accent-bg); }
+
+    /* ── SYSTEM INFO ─────────────────────────────────────────── */
+    .sys-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    @media (max-width: 640px) { .sys-grid { grid-template-columns: 1fr; } }
+
+    .info-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 16px 18px;
+      display: flex; align-items: flex-start; gap: 12px;
+    }
+    .info-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 5px;
+    }
+    .dot-ok    { background: var(--ok); }
+    .dot-muted { background: var(--muted); }
+    .info-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+    .info-value { font-size: 14px; color: var(--fg); margin-top: 3px; line-height: 1.35; }
+
+    /* ── FOOTER ──────────────────────────────────────────────── */
+    .footer {
+      margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--border);
+      text-align: center; font-size: 12px; color: var(--muted); line-height: 1.8;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="app-header">
+    <a class="header-logo" href="?" aria-label="Ferramentas Escolares — início">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 22V10l9-7 9 7v12H3z"/>
+        <path d="M9 22v-6h6v6"/>
+        <rect x="9" y="9" width="2.5" height="2.5" rx=".5" stroke-width="1.4"/>
+        <rect x="12.5" y="9" width="2.5" height="2.5" rx=".5" stroke-width="1.4"/>
+        <circle cx="12" cy="5.5" r="0.8" fill="currentColor" stroke="none"/>
+      </svg>
+      <div>
+        <div class="header-logo-name">Ferramentas Escolares</div>
+        <div class="header-logo-sub">E.B. Municipal de Blumenau</div>
+      </div>
+    </a>
+    <div class="header-spacer"></div>
+    <div class="header-user">
+      <div class="avatar"><?= userInitials ?></div>
+      <span><?= userEmail ?></span>
+    </div>
+  </header>
+
+  <main class="main">
+
+    <div class="hero">
+      <span class="hero-icon" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 22V10l9-7 9 7v12H3z"/>
+          <path d="M9 22v-6h6v6"/>
+        </svg>
+      </span>
+      <h1>Bom dia, <?= firstName ?>!</h1>
+      <p>Ferramentas de gestão escolar integradas ao Google Workspace — sem instalação, sem custo extra e com login automático pelo e-mail da prefeitura.</p>
+    </div>
+
+    <div class="section-label">
+      <span>Ferramentas disponíveis</span>
+      <hr/>
+    </div>
+
+    <div class="tools-grid">
+
+      <!-- Fluxo de Caixa -->
+      <div class="tool-card">
+        <div class="tool-icon-wrap icon-teal" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="5" width="20" height="14" rx="2"/>
+            <path d="M2 10h20"/>
+            <path d="M6 15h4M16 15h2"/>
+            <path d="M12 13v4"/>
+          </svg>
+        </div>
+        <div>
+          <div class="tool-name">Fluxo de Caixa</div>
+          <p class="tool-desc" style="margin-top:6px;">Registre entradas e saídas da APP. Saldo automático, fechamento mensal e trilha completa de auditoria para prestação de contas.</p>
+        </div>
+        <div class="tool-footer">
+          <span class="badge badge-ok"><span class="badge-dot"></span>Disponível</span>
+          <!-- TODO: substitua pelo URL do web app implantado: Apps Script → Implantar → Gerenciar implantações -->
+          <a class="btn btn-primary" href="REPLACE_WITH_CASHFLOW_WEBAPP_URL" target="_blank" rel="noopener">Acessar →</a>
+        </div>
+      </div>
+
+      <!-- Banco de Horas -->
+      <div class="tool-card">
+        <div class="tool-icon-wrap icon-slate" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"/>
+            <polyline points="12 7 12 12 15.5 15.5"/>
+          </svg>
+        </div>
+        <div>
+          <div class="tool-name">Banco de Horas</div>
+          <p class="tool-desc" style="margin-top:6px;">Gestão de horas extras e compensadas dos funcionários. Gestor lança, funcionário consulta o saldo no celular com login Google.</p>
+        </div>
+        <div class="tool-footer">
+          <span class="badge badge-muted"><span class="badge-dot"></span>Em desenvolvimento</span>
+          <!-- TODO: substitua pelo URL do web app quando implantado -->
+          <a class="btn btn-outline" href="REPLACE_WITH_COMPTIME_WEBAPP_URL" target="_blank" rel="noopener">Ver protótipo →</a>
+        </div>
+      </div>
+
+      <!-- Robô da Biblioteca -->
+      <div class="tool-card">
+        <div class="tool-icon-wrap icon-green" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            <path d="M8 7h8M8 11h6"/>
+          </svg>
+        </div>
+        <div>
+          <div class="tool-name">Robô da Biblioteca</div>
+          <p class="tool-desc" style="margin-top:6px;">Cadastre livros escaneando o ISBN pela câmera do celular. Título, autor e editora preenchidos automaticamente.</p>
+        </div>
+        <div class="tool-footer">
+          <span class="badge badge-muted"><span class="badge-dot"></span>Em desenvolvimento</span>
+          <!-- TODO: substitua pelo URL do web app quando implantado -->
+          <a class="btn btn-outline" href="REPLACE_WITH_LIBRARY_WEBAPP_URL" target="_blank" rel="noopener">Ver protótipo →</a>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="section-label">
+      <span>Sobre o sistema</span>
+      <hr/>
+    </div>
+
+    <div class="sys-grid">
+      <div class="info-card">
+        <div class="info-dot dot-ok"></div>
+        <div>
+          <div class="info-label">Autenticação</div>
+          <div class="info-value">Google Workspace SSO ativo — sem senha adicional</div>
+        </div>
+      </div>
+      <div class="info-card">
+        <div class="info-dot dot-ok"></div>
+        <div>
+          <div class="info-label">Armazenamento</div>
+          <div class="info-value">Google Sheets — sem custo e sem servidor próprio</div>
+        </div>
+      </div>
+      <div class="info-card">
+        <div class="info-dot dot-muted"></div>
+        <div>
+          <div class="info-label">Acesso restrito</div>
+          <div class="info-value">Somente @ensinablumenau.sc.gov.br</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      Ferramentas Escolares · E.B. Municipal de Blumenau · SC<br/>
+      Desenvolvido com Google Apps Script + Sheets &nbsp;·&nbsp; Sem custo de hospedagem
+    </div>
+
+  </main>
+
+</body>
+</html>
