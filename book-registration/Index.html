@@ -1,34 +1,80 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
   <base target="_top">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <title>Registro de Livros — Ferramentas Escolares</title>
   <style>
+    :root {
+      --bg:      oklch(96.5% 0.006 256);
+      --surface: #ffffff;
+      --fg:      oklch(17%   0.02  258);
+      --muted:   oklch(48%   0.015 258);
+      --border:  oklch(88%   0.008 256);
+      --brand:   oklch(26%   0.035 258);
+      --accent:  oklch(58%   0.155 201);
+      --accent-bg: oklch(94% 0.04  201);
+      color-scheme: light;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg); color: var(--fg);
       min-height: 100vh;
-      background: #f5f5f5;
-      color: #333;
+      -webkit-font-smoothing: antialiased;
     }
-    .container {
-      text-align: center;
-      padding: 2rem;
+    .page-header {
+      background: var(--brand);
+      background-image: repeating-linear-gradient(
+        transparent, transparent 27px,
+        rgba(255,255,255,0.06) 27px, rgba(255,255,255,0.06) 28px
+      );
+      padding: 18px 20px 16px;
     }
-    .icon { font-size: 4rem; margin-bottom: 1rem; }
-    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
-    p { color: #666; font-size: 1rem; }
+    .page-header-label {
+      font-size: .68rem; font-weight: 600; letter-spacing: 0.1em;
+      text-transform: uppercase; color: rgba(255,255,255,.55); margin-bottom: 4px;
+    }
+    .page-header h1 {
+      font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em;
+      margin: 0; color: #fff;
+    }
+    .page-body {
+      display: flex; align-items: center; justify-content: center;
+      min-height: calc(100vh - 70px); padding: 2rem;
+    }
+    .placeholder {
+      text-align: center; max-width: 340px;
+    }
+    .placeholder-icon {
+      width: 56px; height: 56px; margin: 0 auto 16px;
+      background: var(--accent-bg); border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .placeholder-icon svg { color: var(--accent); }
+    .placeholder h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.01em; }
+    .placeholder p { font-size: .9rem; color: var(--muted); line-height: 1.5; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="icon">📚</div>
+  <header class="page-header">
+    <div class="page-header-label">Ferramentas Escolares</div>
     <h1>Registro de Livros</h1>
-    <p>Em construção — disponível em breve.</p>
+  </header>
+  <div class="page-body">
+    <div class="placeholder">
+      <div class="placeholder-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+      </div>
+      <h2>Em construção</h2>
+      <p>O registro de livros estará disponível em breve.</p>
+    </div>
   </div>
 </body>
 </html>
