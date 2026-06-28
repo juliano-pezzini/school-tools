@@ -317,6 +317,52 @@ function computeCashState_(config, rows) {
   };
 }
 
+/**
+ * Estado do caixa para um mês específico.
+ * `config` e `allRows` como em `computeCashState_`; `mes` é a chave `YYYY-MM`.
+ *
+ * - `saldoInicio`: abertura global + saldo acumulado dos meses anteriores a `mes`.
+ * - `totalEntradas`/`totalSaidas`: apenas os lançamentos do mês `mes`.
+ * - `saldoFinal`: saldoInicio + totalEntradas − totalSaidas.
+ * - `aberturaDefinida`: flag da abertura global.
+ */
+function computeMonthState_(config, allRows, mes) {
+  allRows = allRows || [];
+  mes = String(mes);
+  var abertura = 0;
+  var aberturaDefinida = false;
+  if (config != null && config.saldoAbertura != null && isFinite(Number(config.saldoAbertura))) {
+    abertura = Number(config.saldoAbertura);
+    aberturaDefinida = true;
+  }
+  var carryEntradas = 0, carrySaidas = 0;
+  var mesEntradas = 0, mesSaidas = 0;
+  for (var i = 0; i < allRows.length; i++) {
+    var row = allRows[i];
+    if (!row || row.Excluido === true) continue;
+    var valor = Number(row.Valor);
+    if (!isFinite(valor)) continue;
+    var rp = periodKey_(row.Data);
+    if (rp < mes) {
+      if (row.Tipo === 'entrada') carryEntradas += valor;
+      else if (row.Tipo === 'saida') carrySaidas += valor;
+    } else if (rp === mes) {
+      if (row.Tipo === 'entrada') mesEntradas += valor;
+      else if (row.Tipo === 'saida') mesSaidas += valor;
+    }
+  }
+  var saldoInicio = round2_(abertura + carryEntradas - carrySaidas);
+  mesEntradas = round2_(mesEntradas);
+  mesSaidas = round2_(mesSaidas);
+  return {
+    aberturaDefinida: aberturaDefinida,
+    saldoInicio: saldoInicio,
+    totalEntradas: mesEntradas,
+    totalSaidas: mesSaidas,
+    saldoFinal: round2_(saldoInicio + mesEntradas - mesSaidas)
+  };
+}
+
 // ===========================================================================
 // T7 — Listagem: ordenação, ocultação de excluídos e filtros
 // ===========================================================================
@@ -441,6 +487,7 @@ if (typeof module !== 'undefined' && module.exports) {
     normalizeCategoryKey_: normalizeCategoryKey_,
     computeCategorias_: computeCategorias_,
     computeCashState_: computeCashState_,
+    computeMonthState_: computeMonthState_,
     listForView_: listForView_,
     dedupDecision_: dedupDecision_,
     closeDecision_: closeDecision_,

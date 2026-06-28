@@ -87,6 +87,13 @@
       .modal h2 { margin: 0 0 14px; font-size: 1.05rem; }
       .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
       .edit-pen { background: none; border: none; cursor: pointer; padding: 2px 6px; font-size: .95rem; width: auto; color: #1565c0; vertical-align: middle; }
+      /* month bar */
+      .month-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+      .month-bar .month-nav { display: flex; align-items: center; gap: 6px; }
+      .month-bar .month-nav input { width: 110px; text-align: center; }
+      .month-bar .month-nav button { padding: 8px 10px; font-size: .85rem; }
+      .month-bar .fech-controls { display: flex; align-items: center; gap: 8px; }
+      .month-bar .fech-status { font-size: .82rem; }
     </style>
   </head>
   <body>
@@ -96,9 +103,22 @@
       conferidos. Toda validação é refeita no servidor; a tela é só conveniência.
     </p>
 
+    <!-- ===== Seletor de mês + fechamento ===== -->
+    <div class="month-bar">
+      <div class="month-nav">
+        <button class="ghost" onclick="changeMonth(-1)" title="Mês anterior">◀</button>
+        <input id="gMes" type="text" placeholder="mm/aaaa" maxlength="7" onchange="onMonthChange()" />
+        <button class="ghost" onclick="changeMonth(1)" title="Próximo mês">▶</button>
+      </div>
+      <div class="fech-controls">
+        <span id="fechStatus" class="fech-status"></span>
+        <button id="fechToggle" class="secondary" onclick="toggleFechamento()" style="display:none;"></button>
+      </div>
+    </div>
+
     <!-- ===== Saldo ===== -->
     <div class="card">
-      <h2>Saldo corrente</h2>
+      <h2>Saldo do mês</h2>
       <div id="saldoNum" class="saldo-num">—</div>
       <div id="saldoTotais" class="totais muted"></div>
       <div id="saldoWarn"></div>
@@ -144,10 +164,6 @@
     <div class="card">
       <h2>Lançamentos</h2>
       <div class="row">
-        <div style="min-width:150px;">
-          <label for="fMes">Mês (mm/aaaa)</label>
-          <input id="fMes" type="text" placeholder="mm/aaaa" maxlength="7" />
-        </div>
         <div style="min-width:140px;">
           <label for="fTipo">Tipo</label>
           <select id="fTipo">
@@ -169,28 +185,6 @@
       <table id="listTable" class="hidden">
         <thead>
           <tr><th>Data</th><th>Tipo</th><th>Categoria</th><th class="num">Valor</th><th>Descrição</th><th>Ações</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-
-    <!-- ===== Fechamento ===== -->
-    <div class="card">
-      <h2>Fechamento de mês</h2>
-      <p class="muted" style="margin-top:0;">Um mês fechado bloqueia lançar/editar/excluir naquele período (revalidado no servidor).</p>
-      <div class="row">
-        <div style="min-width:160px;">
-          <label for="cMes">Mês — competência (mm/aaaa)</label>
-          <input id="cMes" type="text" placeholder="mm/aaaa" maxlength="7" />
-        </div>
-        <div>
-          <button onclick="fecharMes()">Fechar mês</button>
-        </div>
-      </div>
-      <div id="fechResult"></div>
-      <table id="fechTable" class="hidden">
-        <thead>
-          <tr><th>Período</th><th>Status</th><th>Fechado por</th><th>Fechado em</th><th>Ações</th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -263,27 +257,61 @@
       // ---- estado da UI ----
       var editId = null;          // id do lançamento em edição (null = criação)
       var clientToken = uuid();   // token de idempotência da criação atual
+      var selectedMonth = '';     // YYYY-MM do mês selecionado
+      var closedSet = {};         // set de períodos fechados (chave YYYY-MM)
 
-      // ===== Saldo =====
-      function loadSaldo(){
-        google.script.run
-          .withSuccessHandler(renderSaldo)
-          .withFailureHandler(function(e){ box('saldoWarn', esc(e.message), 'err'); })
-          .getCashState();
+      // ===== Mês global =====
+      function todayMonthBR(){
+        var d = new Date();
+        return String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
       }
-      function renderSaldo(s){
-        var neg = Number(s.saldoAtual) < 0;
-        el('saldoNum').textContent = fmtBRL(s.saldoAtual);
+      function keyToMonthBR(k){
+        var p = String(k).split('-');
+        return (p.length === 2) ? (p[1]+'/'+p[0]) : k;
+      }
+      function initMonth(){
+        el('gMes').value = todayMonthBR();
+        selectedMonth = mesBRtoKey(el('gMes').value);
+      }
+      function onMonthChange(){
+        var k = mesBRtoKey(el('gMes').value);
+        if (!k) return;
+        selectedMonth = k;
+        refreshAll();
+      }
+      function changeMonth(delta){
+        var k = selectedMonth || mesBRtoKey(el('gMes').value);
+        if (!k) return;
+        var p = k.split('-');
+        var y = parseInt(p[0],10), m = parseInt(p[1],10) + delta;
+        if (m < 1){ m = 12; y--; }
+        if (m > 12){ m = 1; y++; }
+        selectedMonth = y+'-'+String(m).padStart(2,'0');
+        el('gMes').value = keyToMonthBR(selectedMonth);
+        refreshAll();
+      }
+      function refreshAll(){ loadMonthState(); loadLancamentos(); loadCategorias(); loadFechamentoStatus(); }
+
+      // ===== Saldo (mês selecionado) =====
+      function loadMonthState(){
+        google.script.run
+          .withSuccessHandler(renderMonthState)
+          .withFailureHandler(function(e){ box('saldoWarn', esc(e.message), 'err'); })
+          .getMonthState(selectedMonth);
+      }
+      function renderMonthState(s){
+        var neg = Number(s.saldoFinal) < 0;
+        el('saldoNum').textContent = fmtBRL(s.saldoFinal);
         el('saldoNum').classList.toggle('neg', neg);
         var defined = !!s.aberturaDefinida;
-        var abHtml = 'Abertura: <b>'+fmtBRL(s.saldoAbertura)+'</b>';
-        if (defined) abHtml += ' <button class="edit-pen" title="Editar saldo de abertura" onclick="openAbModal()">✏️</button>';
+        var abHtml = 'Abertura do mês: <b>'+fmtBRL(s.saldoInicio)+'</b>';
+        abHtml += ' <button class="edit-pen" title="Editar saldo de abertura global" onclick="openAbModal()">✏️</button>';
         el('saldoTotais').innerHTML =
           '<div>'+abHtml+'</div>'+
           '<div>Entradas: <b>'+fmtBRL(s.totalEntradas)+'</b></div>'+
           '<div>Saídas: <b>'+fmtBRL(s.totalSaidas)+'</b></div>';
         var w = '';
-        if (!defined) w += '<div class="warn">⚠️ Saldo de abertura não definido — tratado como R$ 0,00. <a href="#" onclick="openAbModal();return false;" style="font-weight:700;">Registrar agora</a>.</div>';
+        if (!defined) w += '<div class="warn">⚠️ Saldo de abertura global não definido — tratado como R$ 0,00. <a href="#" onclick="openAbModal();return false;" style="font-weight:700;">Registrar agora</a>.</div>';
         if (neg) w += '<div class="warn">⚠️ Saldo negativo.</div>';
         el('saldoWarn').innerHTML = w;
       }
@@ -326,7 +354,7 @@
         google.script.run
           .withSuccessHandler(function(){
             box('abResult','✅ Saldo de abertura '+(abDefined?'atualizado':'registrado')+'.','ok');
-            setTimeout(function(){ closeAbModal(); loadSaldo(); }, 800);
+            setTimeout(function(){ closeAbModal(); loadMonthState(); }, 800);
           })
           .withFailureHandler(function(e){ btn.disabled = false; box('abResult','❌ '+esc(e.message),'err'); })
           [fn](opts);
@@ -337,7 +365,7 @@
         google.script.run
           .withSuccessHandler(function(){
             box('abResult','✅ Saldo de abertura removido.','ok');
-            setTimeout(function(){ closeAbModal(); loadSaldo(); }, 800);
+            setTimeout(function(){ closeAbModal(); loadMonthState(); }, 800);
           })
           .withFailureHandler(function(e){ el('abRemover').disabled = false; box('abResult','❌ '+esc(e.message),'err'); })
           .clearOpeningBalance();
@@ -430,18 +458,18 @@
         el('lTipo').value = 'entrada';
         show('lCancelar', false);
       }
-      function afterWrite(){ loadSaldo(); loadCategorias(); loadLancamentos(); }
+      function afterWrite(){ refreshAll(); }
 
       // ===== Lista + filtros =====
       function currentFiltro(){
         return {
-          mes: mesBRtoKey(el('fMes').value),   // mm/aaaa → YYYY-MM
+          mes: selectedMonth,                // mês global
           tipo: el('fTipo').value || '',
           categoria: el('fCategoria').value || ''
         };
       }
       function limparFiltro(){
-        el('fMes').value = ''; el('fTipo').value = ''; el('fCategoria').value = '';
+        el('fTipo').value = ''; el('fCategoria').value = '';
         loadLancamentos();
       }
       function loadLancamentos(){
@@ -483,62 +511,53 @@
           .deleteLancamento(id);
       }
 
-      // ===== Fechamento =====
-      function loadFechamentos(){
+      // ===== Fechamento (inline no seletor de mês) =====
+      function loadFechamentoStatus(){
         google.script.run
-          .withSuccessHandler(renderFechamentos)
-          .withFailureHandler(function(e){ show('fechTable', false); box('fechResult', esc(e.message), 'err'); })
+          .withSuccessHandler(function(list){
+            closedSet = {};
+            (list || []).forEach(function(p){ closedSet[p.periodo] = p; });
+            renderFechamentoStatus();
+          })
+          .withFailureHandler(function(){})
           .listClosedPeriods();
       }
-      function periodoBR(p){
-        var x = String(p).split('-');
-        return (x.length === 2) ? (x[1]+'/'+x[0]) : p;
-      }
-      function renderFechamentos(list){
-        if (!list || !list.length){
-          show('fechTable', false);
-          box('fechResult', 'Nenhum mês fechado no momento.', 'ok');
-          return;
+      function renderFechamentoStatus(){
+        var info = closedSet[selectedMonth];
+        var btn = el('fechToggle');
+        if (info) {
+          el('fechStatus').innerHTML = '<span class="pill">fechado</span>';
+          btn.textContent = 'Reabrir';
+          btn.className = 'secondary';
+          btn.style.display = '';
+        } else {
+          el('fechStatus').innerHTML = '<span class="pill" style="background:#e6f4ea;color:#137333;">aberto</span>';
+          btn.textContent = 'Fechar mês';
+          btn.className = '';
+          btn.style.display = '';
         }
-        box('fechResult', '', '');
-        show('fechTable', true);
-        el('fechTable').querySelector('tbody').innerHTML = list.map(function(p){
-          return '<tr>'+
-            '<td>'+esc(periodoBR(p.periodo))+'</td>'+
-            '<td><span class="pill">'+esc(p.status)+'</span></td>'+
-            '<td><small>'+esc(p.fechadoPor)+'</small></td>'+
-            '<td><small>'+esc(p.fechadoEm)+'</small></td>'+
-            '<td class="actions"><button class="secondary" onclick="reabrirMes(\''+esc(p.periodo)+'\')">reabrir</button></td>'+
-          '</tr>';
-        }).join('');
       }
-      function fecharMes(){
-        var periodo = mesBRtoKey(el('cMes').value);  // mm/aaaa → YYYY-MM
-        if (!periodo){ box('fechResult','Informe o mês a fechar (mm/aaaa).','err'); return; }
-        google.script.run
-          .withSuccessHandler(function(res){
-            box('fechResult', res && res.jaFechado ? 'ℹ️ O mês já estava fechado.' : '✅ Mês fechado.', 'ok');
-            loadFechamentos(); afterWrite();
-          })
-          .withFailureHandler(function(e){ box('fechResult','❌ '+esc(e.message),'err'); })
-          .closeMonth(periodo);
-      }
-      function reabrirMes(periodo){
-        google.script.run
-          .withSuccessHandler(function(res){
-            box('fechResult', res && res.jaAberto ? 'ℹ️ O mês já estava aberto.' : '✅ Mês reaberto.', 'ok');
-            loadFechamentos(); afterWrite();
-          })
-          .withFailureHandler(function(e){ box('fechResult','❌ '+esc(e.message),'err'); })
-          .reopenMonth(periodo);
+      function toggleFechamento(){
+        var info = closedSet[selectedMonth];
+        var btn = el('fechToggle');
+        btn.disabled = true;
+        if (info) {
+          google.script.run
+            .withSuccessHandler(function(){ btn.disabled = false; refreshAll(); })
+            .withFailureHandler(function(e){ btn.disabled = false; alert('❌ '+e.message); })
+            .reopenMonth(selectedMonth);
+        } else {
+          google.script.run
+            .withSuccessHandler(function(){ btn.disabled = false; refreshAll(); })
+            .withFailureHandler(function(e){ btn.disabled = false; alert('❌ '+e.message); })
+            .closeMonth(selectedMonth);
+        }
       }
 
       // ===== bootstrap =====
       resetLancamentoForm();
-      loadSaldo();
-      loadCategorias();
-      loadLancamentos();
-      loadFechamentos();
+      initMonth();
+      refreshAll();
     </script>
   </body>
 </html>

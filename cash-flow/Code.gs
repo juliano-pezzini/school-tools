@@ -487,6 +487,12 @@ function getCashState() {
   return computeCashState_(aberturaConfig_(), readLancamentoRows_());
 }
 
+/** Estado do caixa para um mês específico (carry-forward + totais do mês). */
+function getMonthState(mes) {
+  requireRole_(['admin', 'tesoureiro', 'leitor']);
+  return computeMonthState_(aberturaConfig_(), readLancamentoRows_(), String(mes));
+}
+
 /** Categorias distintas (normalizadas) para autocomplete. LANC-06. */
 function listCategorias() {
   requireRole_(['admin', 'tesoureiro', 'leitor']);
