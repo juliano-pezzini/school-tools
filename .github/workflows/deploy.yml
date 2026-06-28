@@ -1,0 +1,174 @@
+name: Deploy to Google Apps Script
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cash-flow/**'
+      - 'book-registration/**'
+      - 'comp-time/**'
+  workflow_dispatch:
+    inputs:
+      project:
+        description: 'Project to deploy'
+        required: true
+        type: choice
+        options:
+          - cash-flow
+          - book-registration
+          - comp-time
+          - all
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      cash-flow: ${{ steps.set-outputs.outputs.cash-flow }}
+      book-registration: ${{ steps.set-outputs.outputs.book-registration }}
+      comp-time: ${{ steps.set-outputs.outputs.comp-time }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect changed paths
+        if: github.event_name == 'push'
+        uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
+        id: filter
+        with:
+          filters: |
+            cash-flow:
+              - 'cash-flow/**'
+            book-registration:
+              - 'book-registration/**'
+            comp-time:
+              - 'comp-time/**'
+
+      - name: Set outputs
+        id: set-outputs
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PROJECT="${{ github.event.inputs.project }}"
+            if [ "$PROJECT" = "all" ] || [ "$PROJECT" = "cash-flow" ]; then
+              echo "cash-flow=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "cash-flow=false" >> "$GITHUB_OUTPUT"
+            fi
+            if [ "$PROJECT" = "all" ] || [ "$PROJECT" = "book-registration" ]; then
+              echo "book-registration=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "book-registration=false" >> "$GITHUB_OUTPUT"
+            fi
+            if [ "$PROJECT" = "all" ] || [ "$PROJECT" = "comp-time" ]; then
+              echo "comp-time=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "comp-time=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "cash-flow=${{ steps.filter.outputs.cash-flow }}" >> "$GITHUB_OUTPUT"
+            echo "book-registration=${{ steps.filter.outputs.book-registration }}" >> "$GITHUB_OUTPUT"
+            echo "comp-time=${{ steps.filter.outputs.comp-time }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  test-cash-flow:
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.cash-flow == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cash-flow
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm test
+
+  deploy-cash-flow:
+    needs: [detect-changes, test-cash-flow]
+    if: >-
+      !failure() &&
+      needs.detect-changes.outputs.cash-flow == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install -g @google/clasp
+      - name: Authenticate clasp
+        env:
+          CLASP_AUTH: ${{ secrets.CLASP_AUTH }}
+        run: echo "$CLASP_AUTH" > ~/.clasprc.json
+      - name: Create clasp project config
+        env:
+          SCRIPT_ID: ${{ secrets.CLASP_SCRIPT_ID_CASH_FLOW }}
+        working-directory: cash-flow
+        run: |
+          cat > .clasp.json << EOF
+          {
+            "scriptId": "${SCRIPT_ID}",
+            "rootDir": "",
+            "scriptExtensions": [".js", ".gs"]
+          }
+          EOF
+      - name: Push to Apps Script
+        working-directory: cash-flow
+        run: clasp push --force
+
+  deploy-book-registration:
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.book-registration == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install -g @google/clasp
+      - name: Authenticate clasp
+        env:
+          CLASP_AUTH: ${{ secrets.CLASP_AUTH }}
+        run: echo "$CLASP_AUTH" > ~/.clasprc.json
+      - name: Create clasp project config
+        env:
+          SCRIPT_ID: ${{ secrets.CLASP_SCRIPT_ID_BOOK_REGISTRATION }}
+        working-directory: book-registration
+        run: |
+          cat > .clasp.json << EOF
+          {
+            "scriptId": "${SCRIPT_ID}",
+            "rootDir": ""
+          }
+          EOF
+      - name: Push to Apps Script
+        working-directory: book-registration
+        run: clasp push --force
+
+  deploy-comp-time:
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.comp-time == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install -g @google/clasp
+      - name: Authenticate clasp
+        env:
+          CLASP_AUTH: ${{ secrets.CLASP_AUTH }}
+        run: echo "$CLASP_AUTH" > ~/.clasprc.json
+      - name: Create clasp project config
+        env:
+          SCRIPT_ID: ${{ secrets.CLASP_SCRIPT_ID_COMP_TIME }}
+        working-directory: comp-time
+        run: |
+          cat > .clasp.json << EOF
+          {
+            "scriptId": "${SCRIPT_ID}",
+            "rootDir": ""
+          }
+          EOF
+      - name: Push to Apps Script
+        working-directory: comp-time
+        run: clasp push --force
