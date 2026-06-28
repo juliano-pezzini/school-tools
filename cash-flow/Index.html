@@ -300,6 +300,16 @@
         el('gMes').value = keyToMonthBR(selectedMonth);
         refreshAll();
       }
+      // Pula o seletor para o mês de uma data 'dd/MM/yyyy' (ex.: após gravar).
+      function goToMonthOfBR(dataBR){
+        var p = String(dataBR || '').split('/');
+        if (p.length !== 3) return false;
+        var k = p[2]+'-'+p[1];
+        if (k === selectedMonth) return false;
+        selectedMonth = k;
+        el('gMes').value = keyToMonthBR(k);
+        return true;
+      }
       function refreshAll(){ loadMonthState(); loadLancamentos(); loadCategorias(); loadFechamentoStatus(); }
 
       // ===== Saldo (mês selecionado) =====
@@ -435,7 +445,7 @@
         btn.disabled = true;                 // anti-duplo-clique (complementa idempotência do servidor)
         if (editId) {
           google.script.run
-            .withSuccessHandler(function(){ btn.disabled = false; box('lResult','✅ Lançamento atualizado.','ok'); resetLancamentoForm(); afterWrite(); })
+            .withSuccessHandler(function(){ btn.disabled = false; box('lResult','✅ Lançamento atualizado.','ok'); goToMonthOfBR(item.data); resetLancamentoForm(); afterWrite(); })
             .withFailureHandler(function(e){ btn.disabled = false; box('lResult','❌ '+esc(e.message),'err'); })
             .editLancamento(editId, item);
         } else {
@@ -445,6 +455,7 @@
               clientToken = uuid();          // rotaciona o token após sucesso
               box('lResult','✅ Lançamento adicionado.','ok');
               el('lValor').value = ''; el('lDescricao').value = '';
+              goToMonthOfBR(item.data);      // garante que o novo lançamento fique visível
               afterWrite();
             })
             .withFailureHandler(function(e){ btn.disabled = false; box('lResult','❌ '+esc(e.message),'err'); })
