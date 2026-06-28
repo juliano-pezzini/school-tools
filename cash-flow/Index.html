@@ -35,58 +35,146 @@
   <head>
     <base target="_top" />
     <meta charset="utf-8" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <style>
-      :root { color-scheme: light; }
+      /* ── DESIGN SYSTEM — Ferramentas Escolares ─────────────────────────── */
+      :root {
+        --bg:        oklch(96.5% 0.006 256);
+        --surface:   #ffffff;
+        --muted-bg:  oklch(92%   0.006 256);
+        --fg:        oklch(17%   0.02  258);
+        --muted:     oklch(48%   0.015 258);
+        --border:    oklch(88%   0.008 256);
+        --brand:     oklch(26%   0.035 258);
+        --brand-md:  oklch(38%   0.04  258);
+        --brand-lt:  oklch(58%   0.03  258);
+        --accent:    oklch(58%   0.155 201);
+        --accent-h:  oklch(52%   0.155 201);
+        --accent-bg: oklch(94%   0.04  201);
+        --ok:        oklch(52%   0.14  155);
+        --ok-bg:     oklch(95%   0.04  155);
+        --ok-dk:     oklch(35%   0.12  155);
+        --err:       oklch(52%   0.18   25);
+        --err-bg:    oklch(96%   0.04   25);
+        --err-dk:    oklch(38%   0.16   25);
+        --warn:      oklch(65%   0.14   78);
+        --warn-bg:   oklch(97%   0.04   78);
+        --warn-bdr:  oklch(80%   0.10   78);
+        --warn-dk:   oklch(42%   0.12   78);
+        --r-sm: 6px; --r-md: 10px; --r-lg: 16px;
+        color-scheme: light;
+      }
       * { box-sizing: border-box; }
       body {
-        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-        margin: 0 auto; padding: 16px; max-width: 920px;
-        background: #f4f6f8; color: #1a1a1a;
+        font-family: 'Inter', -apple-system, "Segoe UI", system-ui, sans-serif;
+        margin: 0; padding: 0;
+        background: var(--bg); color: var(--fg);
+        -webkit-font-smoothing: antialiased;
       }
-      h1 { font-size: 1.25rem; margin: 0 0 4px; }
-      h2 { font-size: 1.02rem; margin: 2px 0 12px; }
-      .muted { color: #666; font-size: 0.85rem; }
-      .card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+      /* ── Page header ── */
+      .page-header {
+        background: var(--brand);
+        background-image: repeating-linear-gradient(
+          transparent, transparent 27px,
+          rgba(255,255,255,0.06) 27px, rgba(255,255,255,0.06) 28px
+        );
+        padding: 18px 20px 16px;
+        color: #fff;
+      }
+      .page-header-inner { max-width: 920px; margin: 0 auto; }
+      .page-header-label {
+        font-size: .68rem; font-weight: 600; letter-spacing: 0.1em;
+        text-transform: uppercase; color: rgba(255,255,255,.55); margin-bottom: 4px;
+      }
+      .page-header h1 {
+        font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em;
+        margin: 0 0 2px; color: #fff;
+      }
+      .page-header p { font-size: .82rem; color: rgba(255,255,255,.65); margin: 0; }
+      /* ── Content wrapper ── */
+      .page-body { max-width: 920px; margin: 0 auto; padding: 16px; }
+      h2 { font-size: 1rem; font-weight: 600; margin: 2px 0 12px; letter-spacing: -0.01em; }
+      .muted { color: var(--muted); font-size: 0.85rem; }
+      .card {
+        background: var(--surface); border-radius: var(--r-lg);
+        border: 1px solid var(--border);
+        padding: 16px; margin-bottom: 14px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.06);
+      }
       .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
       .grow { flex: 1; min-width: 130px; }
-      label { font-size: .72rem; color: #666; text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: 4px; }
-      input, select, button, textarea {
-        padding: 10px 12px; font-size: .95rem; border-radius: 8px;
-        border: 1px solid #cfd8dc; background: #fff; font-family: inherit; width: 100%;
+      label {
+        font-size: .68rem; color: var(--muted); text-transform: uppercase;
+        letter-spacing: .08em; font-weight: 600; display: block; margin-bottom: 4px;
+      }
+      input, select, textarea {
+        padding: 10px 12px; font-size: .95rem; border-radius: var(--r-md);
+        border: 1px solid var(--border); background: var(--surface);
+        font-family: inherit; width: 100%; color: var(--fg);
+        transition: border-color .15s, box-shadow .15s;
+      }
+      input:focus, select:focus, textarea:focus {
+        outline: none; border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-bg);
       }
       textarea { resize: vertical; min-height: 42px; }
-      button { border: 0; background: #1565c0; color: #fff; font-weight: 600; cursor: pointer; width: auto; }
-      button:active { background: #0d47a1; }
-      button.danger { background: #c5221f; }
-      button.secondary { background: #455a64; }
-      button.ghost { background: #eceff1; color: #37474f; }
-      button:disabled { opacity: .5; cursor: not-allowed; }
-      .saldo-num { font-size: 1.9rem; font-weight: 800; font-variant-numeric: tabular-nums; }
-      .saldo-num.neg { color: #c5221f; }
+      button {
+        padding: 10px 12px; font-size: .95rem; border-radius: var(--r-md);
+        border: 0; background: var(--accent); color: #fff;
+        font-weight: 600; cursor: pointer; width: auto; font-family: inherit;
+        transition: background .15s;
+      }
+      button:hover  { background: var(--accent-h); }
+      button:active { background: var(--accent-h); }
+      button.danger    { background: var(--err);      color: var(--surface); }
+      button.danger:hover { background: var(--err-dk); }
+      button.secondary { background: var(--brand-md); color: #fff; }
+      button.secondary:hover { background: var(--brand); }
+      button.ghost { background: var(--muted-bg); color: var(--fg); }
+      button.ghost:hover { background: var(--border); }
+      button:disabled { opacity: .45; cursor: not-allowed; }
+      .saldo-num { font-size: 1.9rem; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+      .saldo-num.neg { color: var(--err-dk); }
       .totais { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; }
       .totais div b { font-variant-numeric: tabular-nums; }
-      .warn { background: #fff8e1; border: 1px solid #ffe082; color: #795548; padding: 10px 12px; border-radius: 8px; margin-top: 10px; font-size: .9rem; }
+      .warn {
+        background: var(--warn-bg); border: 1px solid var(--warn-bdr);
+        color: var(--warn-dk); padding: 10px 12px;
+        border-radius: var(--r-md); margin-top: 10px; font-size: .9rem;
+      }
       table { width: 100%; border-collapse: collapse; font-size: .86rem; margin-top: 10px; }
-      th, td { padding: 7px 8px; border-bottom: 1px solid #eceff1; text-align: left; }
-      th { font-size: .7rem; text-transform: uppercase; color: #666; }
+      th, td { padding: 7px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+      th { font-size: .68rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; }
       td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       .tag { font-size: .68rem; padding: 2px 7px; border-radius: 999px; font-weight: 600; }
-      .tag.entrada { background: #e6f4ea; color: #137333; }
-      .tag.saida { background: #fce8e6; color: #c5221f; }
-      .result { padding: 10px 12px; border-radius: 8px; margin-top: 10px; font-size: .88rem; font-weight: 600; }
-      .ok { background: #e6f4ea; color: #137333; }
-      .err { background: #fce8e6; color: #c5221f; }
+      .tag.entrada { background: var(--ok-bg);  color: var(--ok-dk); }
+      .tag.saida   { background: var(--err-bg); color: var(--err-dk); }
+      .result { padding: 10px 12px; border-radius: var(--r-md); margin-top: 10px; font-size: .88rem; font-weight: 600; }
+      .ok  { background: var(--ok-bg);  color: var(--ok-dk); }
+      .err { background: var(--err-bg); color: var(--err-dk); }
       .hidden { display: none; }
       .actions button { padding: 5px 9px; font-size: .8rem; margin-right: 4px; }
       .field { margin-bottom: 8px; }
-      .pill { display: inline-block; font-size: .72rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: #e8eaf6; color: #283593; }
+      .pill {
+        display: inline-block; font-size: .7rem; font-weight: 700;
+        padding: 3px 10px; border-radius: 999px;
+        background: var(--accent-bg); color: var(--accent);
+        letter-spacing: 0.02em;
+      }
       /* modal */
       .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 100; }
       .modal-backdrop.hidden { display: none; }
-      .modal { background: #fff; border-radius: 14px; padding: 20px; width: 92%; max-width: 440px; box-shadow: 0 8px 30px rgba(0,0,0,.22); }
+      .modal {
+        background: var(--surface); border-radius: var(--r-lg);
+        border: 1px solid var(--border);
+        padding: 20px; width: 92%; max-width: 440px;
+        box-shadow: 0 8px 30px rgba(0,0,0,.18);
+      }
       .modal h2 { margin: 0 0 14px; font-size: 1.05rem; }
       .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
-      .edit-pen { background: none; border: none; cursor: pointer; padding: 2px 6px; font-size: .95rem; width: auto; color: #1565c0; vertical-align: middle; }
+      .edit-pen { background: none; border: none; cursor: pointer; padding: 2px 6px; font-size: .95rem; width: auto; color: var(--accent); vertical-align: middle; }
       /* month bar */
       .month-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
       .month-bar .month-nav { display: flex; align-items: center; gap: 6px; }
@@ -97,11 +185,14 @@
     </style>
   </head>
   <body>
-    <h1>Fluxo de Caixa — APP</h1>
-    <p class="muted">
-      Registre entradas e saídas, acompanhe o <b>saldo corrente</b> e feche os meses
-      conferidos. Toda validação é refeita no servidor; a tela é só conveniência.
-    </p>
+    <header class="page-header">
+      <div class="page-header-inner">
+        <div class="page-header-label">Ferramentas Escolares</div>
+        <h1>Fluxo de Caixa</h1>
+        <p>Registre entradas e saídas, acompanhe o saldo corrente e feche os meses conferidos.</p>
+      </div>
+    </header>
+    <div class="page-body">
 
     <!-- ===== Seletor de mês + fechamento ===== -->
     <div class="month-bar">
@@ -586,5 +677,6 @@
       initMonth();
       refreshAll();
     </script>
+  </div><!-- /.page-body -->
   </body>
 </html>
