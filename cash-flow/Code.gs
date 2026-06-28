@@ -478,7 +478,22 @@ function aberturaConfig_() {
 /** Lista de lançamentos para a UI (oculta excluídos, ordena/filtra). LANC-04/09/11. */
 function listLancamentos(filtro) {
   requireRole_(['admin', 'tesoureiro', 'leitor']);
-  return listForView_(readLancamentoRows_(), filtro || {});
+  var rows = listForView_(readLancamentoRows_(), filtro || {});
+  // google.script.run não serializa Date — converte para string ISO antes de devolver.
+  return rows.map(function (r) {
+    var d = r.Data;
+    var dataISO = (d instanceof Date && !isNaN(d.getTime()))
+      ? d.getFullYear() + '-' + pad2_(d.getMonth() + 1) + '-' + pad2_(d.getDate())
+      : '';
+    return {
+      Id: r.Id,
+      Data: dataISO,
+      Tipo: r.Tipo,
+      Categoria: r.Categoria,
+      Valor: r.Valor,
+      Descricao: r.Descricao
+    };
+  });
 }
 
 /** Estado do caixa (abertura + totais + saldo corrente, ignora excluídos). LANC-03. */

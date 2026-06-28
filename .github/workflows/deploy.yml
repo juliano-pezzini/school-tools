@@ -114,15 +114,24 @@ jobs:
       - name: Push to Apps Script
         working-directory: cash-flow
         run: clasp push --force
+      - name: Update versioned deployment
+        working-directory: cash-flow
+        env:
+          DEPLOY_ID: ${{ secrets.CLASP_DEPLOY_ID_CASH_FLOW }}
+        run: |
+          if [ -n "$DEPLOY_ID" ]; then
+            clasp deploy -i "$DEPLOY_ID"
+          fi
       - name: Post webapp URL to summary
         working-directory: cash-flow
+        env:
+          DEPLOY_ID: ${{ secrets.CLASP_DEPLOY_ID_CASH_FLOW }}
         run: |
-          DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
           echo "### cash-flow" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$DEPLOY_ID" ]; then
             echo "https://script.google.com/macros/s/${DEPLOY_ID}/exec" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "_No versioned deployment. Create one with_ \`clasp deploy\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "_No versioned deployment. Set CLASP_DEPLOY_ID_CASH_FLOW secret._ " >> "$GITHUB_STEP_SUMMARY"
           fi
 
   deploy-book-registration:
@@ -153,15 +162,24 @@ jobs:
       - name: Push to Apps Script
         working-directory: book-registration
         run: clasp push --force
+      - name: Update versioned deployment
+        working-directory: book-registration
+        env:
+          DEPLOY_ID: ${{ secrets.CLASP_DEPLOY_ID_BOOK_REGISTRATION }}
+        run: |
+          if [ -n "$DEPLOY_ID" ]; then
+            clasp deploy -i "$DEPLOY_ID"
+          fi
       - name: Post webapp URL to summary
         working-directory: book-registration
+        env:
+          DEPLOY_ID: ${{ secrets.CLASP_DEPLOY_ID_BOOK_REGISTRATION }}
         run: |
-          DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
           echo "### book-registration" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$DEPLOY_ID" ]; then
             echo "https://script.google.com/macros/s/${DEPLOY_ID}/exec" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "_No versioned deployment. Create one with_ \`clasp deploy\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "_No versioned deployment. Set CLASP_DEPLOY_ID_BOOK_REGISTRATION secret._" >> "$GITHUB_STEP_SUMMARY"
           fi
 
   deploy-comp-time:
@@ -192,13 +210,22 @@ jobs:
       - name: Push to Apps Script
         working-directory: comp-time
         run: clasp push --force
+      - name: Update versioned deployment
+        working-directory: comp-time
+        env:
+          DEPLOY_ID: ${{ secrets.CLASP_DEPLOY_ID_COMP_TIME }}
+        run: |
+          if [ -n "$DEPLOY_ID" ]; then
+            clasp deploy -i "$DEPLOY_ID"
+          fi
       - name: Post webapp URL to summary
         working-directory: comp-time
+        env:
+          DEPLOY_ID: ${{ secrets.CLASP_DEPLOY_ID_COMP_TIME }}
         run: |
-          DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
           echo "### comp-time" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$DEPLOY_ID" ]; then
             echo "https://script.google.com/macros/s/${DEPLOY_ID}/exec" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "_No versioned deployment. Create one with_ \`clasp deploy\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "_No versioned deployment. Set CLASP_DEPLOY_ID_COMP_TIME secret._" >> "$GITHUB_STEP_SUMMARY"
           fi
