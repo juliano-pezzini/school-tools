@@ -27,11 +27,11 @@ jobs:
       book-registration: ${{ steps.set-outputs.outputs.book-registration }}
       comp-time: ${{ steps.set-outputs.outputs.comp-time }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Detect changed paths
         if: github.event_name == 'push'
-        uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
           filters: |
@@ -76,8 +76,8 @@ jobs:
       run:
         working-directory: cash-flow
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
       - run: npm ci
@@ -90,8 +90,8 @@ jobs:
       needs.detect-changes.outputs.cash-flow == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
       - run: npm install -g @google/clasp
@@ -130,8 +130,8 @@ jobs:
     if: needs.detect-changes.outputs.book-registration == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
       - run: npm install -g @google/clasp
@@ -169,8 +169,8 @@ jobs:
     if: needs.detect-changes.outputs.comp-time == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
       - run: npm install -g @google/clasp
