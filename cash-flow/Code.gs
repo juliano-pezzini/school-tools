@@ -79,12 +79,87 @@ function getSpreadsheet_() {
   var props = PropertiesService.getScriptProperties();
   var id = props.getProperty(PROP_SHEET_ID);
   if (id) {
-    try { return SpreadsheetApp.openById(id); } catch (e) { /* recria abaixo */ }
+    // Já existe uma planilha configurada: NUNCA criar outra silenciosamente
+    // (isso "orfanaria" os dados). Falha de abertura vira erro explícito.
+    try {
+      return SpreadsheetApp.openById(id);
+    } catch (e) {
+      throw new Error('Não foi possível abrir a planilha de dados (id ' + id +
+        '). Verifique o acesso ou ajuste a propriedade ' + PROP_SHEET_ID +
+        ' com setDataSpreadsheetId(id).');
+    }
   }
+  // Sem id configurado: 1ª execução cria a planilha e persiste o id.
   var ss = SpreadsheetApp.create('Fluxo de Caixa — APP (dados)');
   buildSheets_(ss);
   props.setProperty(PROP_SHEET_ID, ss.getId());
   return ss;
+}
+
+/**
+ * Admin/diagnóstico: informa qual planilha de dados está ATIVA (a que o app lê).
+ * Rode no editor do Apps Script para confirmar se aponta para a planilha certa.
+ * Retorna `{ id, url, nome }`.
+ */
+function getDataSpreadsheetInfo() {
+  var id = PropertiesService.getScriptProperties().getProperty(PROP_SHEET_ID);
+  if (!id) return { id: null, url: null, nome: null };
+  var ss = SpreadsheetApp.openById(id);
+  var info = { id: id, url: ss.getUrl(), nome: ss.getName() };
+  Logger.log(JSON.stringify(info));
+  return info;
+}
+
+/**
+ * Admin/correção: aponta o app para uma planilha de dados específica (a que
+ * contém seus lançamentos). Pegue o id da URL da planilha certa
+ * (.../spreadsheets/d/ESTE_ID/edit) e rode `setDataSpreadsheetId('ESTE_ID')`
+ * uma única vez no editor do Apps Script. Valida que a planilha abre e tem a
+ * aba `Lancamentos` antes de gravar.
+ */
+function setDataSpreadsheetId(id) {
+  id = String(id || '').trim();
+  if (!id) throw new Error('Informe o id da planilha.');
+  var ss = SpreadsheetApp.openById(id); // lança se inválida/sem acesso
+  if (!ss.getSheetByName(SH_LANC)) {
+    throw new Error('A planilha não tem a aba "' + SH_LANC + '". Id incorreto?');
+  }
+  PropertiesService.getScriptProperties().setProperty(PROP_SHEET_ID, id);
+  return { ok: true, id: id, url: ss.getUrl(), nome: ss.getName() };
+}
+
+/**
+ * Admin/diagnóstico: despeja EXATAMENTE o que o app lê da aba Lancamentos —
+ * qual planilha, quantas linhas, e para cada linha o valor cru de Data, seu
+ * tipo e o período `YYYY-MM` calculado. Rode no editor e veja o Log (Ctrl+Enter).
+ */
+function debugLancamentos() {
+  var info = getDataSpreadsheetInfo();
+  var sheet = getSheet_(SH_LANC);
+  var rawRows = sheet ? sheet.getDataRange().getValues().length - 1 : -1;
+  var rows = readLancamentoRows_();
+  var amostra = rows.slice(0, 30).map(function (r) {
+    var periodo;
+    try { periodo = periodKey_(r.Data); } catch (e) { periodo = 'ERRO: ' + e.message; }
+    return {
+      Id: r.Id,
+      dataCru: String(r.Data),
+      dataTipo: (r.Data instanceof Date ? 'Date' : (r.Data == null ? 'null' : typeof r.Data)),
+      periodo: periodo,
+      tipo: r.Tipo,
+      valor: r.Valor,
+      excluido: r.Excluido
+    };
+  });
+  var res = {
+    planilha: info,
+    linhasBrutas: rawRows,
+    linhasLidas: rows.length,
+    mesCorrenteServidor: mesCorrente_(),
+    amostra: amostra
+  };
+  Logger.log(JSON.stringify(res, null, 2));
+  return res;
 }
 
 /** Atalho para uma aba por nome. */
