@@ -106,9 +106,12 @@
     <!-- ===== Seletor de mês + fechamento ===== -->
     <div class="month-bar">
       <div class="month-nav">
-        <button class="ghost" onclick="changeMonth(-1)" title="Mês anterior">◀</button>
-        <input id="gMes" type="text" placeholder="mm/aaaa" maxlength="7" onchange="onMonthChange()" />
-        <button class="ghost" onclick="changeMonth(1)" title="Próximo mês">▶</button>
+        <button type="button" class="ghost" onclick="changeMonth(-1)" title="Mês anterior">◀</button>
+        <input id="gMes" type="text" placeholder="mm/aaaa" maxlength="7"
+               onchange="onMonthChange()"
+               oninput="onMonthInput()"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();onMonthChange();}" />
+        <button type="button" class="ghost" onclick="changeMonth(1)" title="Próximo mês">▶</button>
       </div>
       <div class="fech-controls">
         <span id="fechStatus" class="fech-status"></span>
@@ -136,8 +139,8 @@
           </select>
         </div>
         <div style="min-width:150px;">
-          <label for="lData">Data (dd/mm/aaaa)</label>
-          <input id="lData" type="text" placeholder="dd/mm/aaaa" maxlength="10" />
+          <label for="lData">Data</label>
+          <input id="lData" type="date" />
         </div>
         <div style="min-width:130px;">
           <label for="lValor">Valor (R$)</label>
@@ -276,8 +279,13 @@
       function onMonthChange(){
         var k = mesBRtoKey(el('gMes').value);
         if (!k) return;
+        if (k === selectedMonth) return;   // nada mudou
         selectedMonth = k;
         refreshAll();
+      }
+      function onMonthInput(){
+        var v = el('gMes').value;
+        if (/^\d{2}\/\d{4}$/.test(v)) onMonthChange();
       }
       function changeMonth(delta){
         var k = selectedMonth || mesBRtoKey(el('gMes').value);
@@ -398,10 +406,16 @@
         var n = Number(s);
         return isFinite(n) ? n : NaN;
       }
+      // Converte 'yyyy-MM-dd' (input date) → 'dd/MM/yyyy' (servidor).
+      function inputDateToBR(v){
+        if (!v) return '';
+        var p = v.split('-');
+        return p[2]+'/'+p[1]+'/'+p[0];
+      }
       function buildItem(){
         return {
           tipo: el('lTipo').value,
-          data: el('lData').value,              // já em dd/mm/aaaa
+          data: inputDateToBR(el('lData').value),
           valor: el('lValor').value,
           categoria: el('lCategoria').value,
           descricao: el('lDescricao').value
@@ -440,7 +454,7 @@
         clientToken = uuid();
         el('lancTitulo').textContent = 'Editar lançamento';
         el('lTipo').value = r.Tipo;
-        el('lData').value = dateToBR(r.Data);       // dd/mm/aaaa
+        el('lData').value = dateToInput(r.Data);    // yyyy-MM-dd (native date input)
         el('lValor').value = String(r.Valor).replace('.', ',');
         el('lCategoria').value = r.Categoria || '';
         el('lDescricao').value = r.Descricao || '';
