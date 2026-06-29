@@ -132,9 +132,14 @@ jobs:
         working-directory: cash-flow
         run: |
           DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
+          if [ -z "$DEPLOY_ID" ]; then
+            clasp deploy
+            DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
+          else
+            clasp deploy -i "$DEPLOY_ID"
+          fi
           echo "### cash-flow" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$DEPLOY_ID" ]; then
-            clasp deploy -i "$DEPLOY_ID"
             URL="https://script.google.com/macros/s/${DEPLOY_ID}/exec"
             echo "webapp-url=${URL}" >> "$GITHUB_OUTPUT"
             echo "${URL}" >> "$GITHUB_STEP_SUMMARY"
@@ -177,9 +182,14 @@ jobs:
         working-directory: book-registration
         run: |
           DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
+          if [ -z "$DEPLOY_ID" ]; then
+            clasp deploy
+            DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
+          else
+            clasp deploy -i "$DEPLOY_ID"
+          fi
           echo "### book-registration" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$DEPLOY_ID" ]; then
-            clasp deploy -i "$DEPLOY_ID"
             URL="https://script.google.com/macros/s/${DEPLOY_ID}/exec"
             echo "webapp-url=${URL}" >> "$GITHUB_OUTPUT"
             echo "${URL}" >> "$GITHUB_STEP_SUMMARY"
@@ -222,9 +232,14 @@ jobs:
         working-directory: comp-time
         run: |
           DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
+          if [ -z "$DEPLOY_ID" ]; then
+            clasp deploy
+            DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
+          else
+            clasp deploy -i "$DEPLOY_ID"
+          fi
           echo "### comp-time" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$DEPLOY_ID" ]; then
-            clasp deploy -i "$DEPLOY_ID"
             URL="https://script.google.com/macros/s/${DEPLOY_ID}/exec"
             echo "webapp-url=${URL}" >> "$GITHUB_OUTPUT"
             echo "${URL}" >> "$GITHUB_STEP_SUMMARY"
@@ -292,9 +307,14 @@ jobs:
         working-directory: portal
         run: |
           DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
+          if [ -z "$DEPLOY_ID" ]; then
+            clasp deploy
+            DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
+          else
+            clasp deploy -i "$DEPLOY_ID"
+          fi
           echo "### portal" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$DEPLOY_ID" ]; then
-            clasp deploy -i "$DEPLOY_ID"
             echo "https://script.google.com/macros/s/${DEPLOY_ID}/exec" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "_No versioned deployment found._" >> "$GITHUB_STEP_SUMMARY"
