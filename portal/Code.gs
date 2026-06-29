@@ -39,6 +39,7 @@ function doGet(e) {
 
   return tpl.evaluate()
     .setTitle('Ferramentas Escolares')
+    .setFaviconUrl('https://cdn.jsdelivr.net/gh/juliano-pezzini/school-tools@main/portal/favicon.svg')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
