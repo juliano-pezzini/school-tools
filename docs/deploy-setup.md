@@ -36,7 +36,7 @@ Get-Content "$env:USERPROFILE\.clasprc.json"
 ## 2. Create Apps Script projects (for new projects)
 
 For each project that doesn't have an Apps Script project yet
-(`book-registration`, `comp-time`):
+(`book-registration`, `comp-time`, `portal`):
 
 ```bash
 cd book-registration
@@ -57,9 +57,29 @@ Go to your repository **Settings > Secrets and variables > Actions** and add:
 | `CLASP_SCRIPT_ID_CASH_FLOW`        | Script ID for cash-flow (from `.clasp.json`)   |
 | `CLASP_SCRIPT_ID_BOOK_REGISTRATION`| Script ID for book-registration                |
 | `CLASP_SCRIPT_ID_COMP_TIME`        | Script ID for comp-time                        |
+| `CLASP_SCRIPT_ID_PORTAL`           | Script ID for portal                           |
 
 > **Security note:** `CLASP_AUTH` contains OAuth refresh tokens. Treat it like
 > a password. GitHub encrypts secrets at rest and they are never exposed in logs.
+
+### Repository variables (portal links)
+
+The `portal` web app links to the other apps. The pipeline injects each app's
+`/exec` URL into `portal/Index.html` at deploy time. When an app is deployed in
+the same run, its freshly-resolved URL is used automatically. For runs where an
+upstream app did **not** change (its deploy job is skipped), the pipeline falls
+back to these repository **variables** (Settings > Secrets and variables >
+Actions > **Variables**):
+
+| Variable                         | Value (stable `/exec` URL)                         |
+|----------------------------------|----------------------------------------------------|
+| `WEBAPP_URL_CASH_FLOW`           | `https://script.google.com/macros/s/<id>/exec`     |
+| `WEBAPP_URL_COMP_TIME`           | `https://script.google.com/macros/s/<id>/exec`     |
+| `WEBAPP_URL_BOOK_REGISTRATION`   | `https://script.google.com/macros/s/<id>/exec`     |
+
+> These are **variables**, not secrets — the URLs are not sensitive. Apps Script
+> `/exec` URLs are stable per deployment, so you only set them once (copy from a
+> deploy run summary or from **Apps Script > Deploy > Manage deployments**).
 
 ### Getting the cash-flow Script ID
 
@@ -86,6 +106,11 @@ The API must be enabled for your Google account:
 1. Detect which projects have changes (path filters)
 2. Run tests (only `cash-flow` has tests currently)
 3. Deploy via `clasp push --force`
+
+**Portal ordering:** `deploy-portal` runs **after** `deploy-cash-flow`,
+`deploy-book-registration` and `deploy-comp-time` so it can inject their live
+`/exec` URLs into `portal/Index.html`. It deploys when `portal/**` changes **or**
+when any of those upstream apps deployed (so its links stay current).
 
 **Adding tests to other projects:** When `book-registration` or `comp-time`
 gain tests, add a `test-<project>` job to `.github/workflows/deploy.yml`

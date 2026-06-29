@@ -7,6 +7,7 @@ on:
       - 'cash-flow/**'
       - 'book-registration/**'
       - 'comp-time/**'
+      - 'portal/**'
   workflow_dispatch:
     inputs:
       project:
@@ -17,6 +18,7 @@ on:
           - cash-flow
           - book-registration
           - comp-time
+          - portal
           - all
 
 jobs:
@@ -26,6 +28,7 @@ jobs:
       cash-flow: ${{ steps.set-outputs.outputs.cash-flow }}
       book-registration: ${{ steps.set-outputs.outputs.book-registration }}
       comp-time: ${{ steps.set-outputs.outputs.comp-time }}
+      portal: ${{ steps.set-outputs.outputs.portal }}
     steps:
       - uses: actions/checkout@v7
 
@@ -41,6 +44,8 @@ jobs:
               - 'book-registration/**'
             comp-time:
               - 'comp-time/**'
+            portal:
+              - 'portal/**'
 
       - name: Set outputs
         id: set-outputs
@@ -62,10 +67,16 @@ jobs:
             else
               echo "comp-time=false" >> "$GITHUB_OUTPUT"
             fi
+            if [ "$PROJECT" = "all" ] || [ "$PROJECT" = "portal" ]; then
+              echo "portal=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "portal=false" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "cash-flow=${{ steps.filter.outputs.cash-flow }}" >> "$GITHUB_OUTPUT"
             echo "book-registration=${{ steps.filter.outputs.book-registration }}" >> "$GITHUB_OUTPUT"
             echo "comp-time=${{ steps.filter.outputs.comp-time }}" >> "$GITHUB_OUTPUT"
+            echo "portal=${{ steps.filter.outputs.portal }}" >> "$GITHUB_OUTPUT"
           fi
 
   test-cash-flow:
@@ -89,6 +100,8 @@ jobs:
       !failure() &&
       needs.detect-changes.outputs.cash-flow == 'true'
     runs-on: ubuntu-latest
+    outputs:
+      webapp-url: ${{ steps.deploy.outputs.webapp-url }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -115,19 +128,16 @@ jobs:
         working-directory: cash-flow
         run: clasp push --force
       - name: Update versioned deployment
-        working-directory: cash-flow
-        run: |
-          DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
-          if [ -n "$DEPLOY_ID" ]; then
-            clasp deploy -i "$DEPLOY_ID"
-          fi
-      - name: Post webapp URL to summary
+        id: deploy
         working-directory: cash-flow
         run: |
           DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
           echo "### cash-flow" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$DEPLOY_ID" ]; then
-            echo "https://script.google.com/macros/s/${DEPLOY_ID}/exec" >> "$GITHUB_STEP_SUMMARY"
+            clasp deploy -i "$DEPLOY_ID"
+            URL="https://script.google.com/macros/s/${DEPLOY_ID}/exec"
+            echo "webapp-url=${URL}" >> "$GITHUB_OUTPUT"
+            echo "${URL}" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "_No versioned deployment found._" >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -136,6 +146,8 @@ jobs:
     needs: [detect-changes]
     if: needs.detect-changes.outputs.book-registration == 'true'
     runs-on: ubuntu-latest
+    outputs:
+      webapp-url: ${{ steps.deploy.outputs.webapp-url }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -161,19 +173,16 @@ jobs:
         working-directory: book-registration
         run: clasp push --force
       - name: Update versioned deployment
-        working-directory: book-registration
-        run: |
-          DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
-          if [ -n "$DEPLOY_ID" ]; then
-            clasp deploy -i "$DEPLOY_ID"
-          fi
-      - name: Post webapp URL to summary
+        id: deploy
         working-directory: book-registration
         run: |
           DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
           echo "### book-registration" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$DEPLOY_ID" ]; then
-            echo "https://script.google.com/macros/s/${DEPLOY_ID}/exec" >> "$GITHUB_STEP_SUMMARY"
+            clasp deploy -i "$DEPLOY_ID"
+            URL="https://script.google.com/macros/s/${DEPLOY_ID}/exec"
+            echo "webapp-url=${URL}" >> "$GITHUB_OUTPUT"
+            echo "${URL}" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "_No versioned deployment found._" >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -182,6 +191,8 @@ jobs:
     needs: [detect-changes]
     if: needs.detect-changes.outputs.comp-time == 'true'
     runs-on: ubuntu-latest
+    outputs:
+      webapp-url: ${{ steps.deploy.outputs.webapp-url }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -207,18 +218,83 @@ jobs:
         working-directory: comp-time
         run: clasp push --force
       - name: Update versioned deployment
-        working-directory: comp-time
-        run: |
-          DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
-          if [ -n "$DEPLOY_ID" ]; then
-            clasp deploy -i "$DEPLOY_ID"
-          fi
-      - name: Post webapp URL to summary
+        id: deploy
         working-directory: comp-time
         run: |
           DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
           echo "### comp-time" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$DEPLOY_ID" ]; then
+            clasp deploy -i "$DEPLOY_ID"
+            URL="https://script.google.com/macros/s/${DEPLOY_ID}/exec"
+            echo "webapp-url=${URL}" >> "$GITHUB_OUTPUT"
+            echo "${URL}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "_No versioned deployment found._" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  deploy-portal:
+    needs:
+      - detect-changes
+      - deploy-cash-flow
+      - deploy-book-registration
+      - deploy-comp-time
+    if: >-
+      !cancelled() && !failure() &&
+      (needs.detect-changes.outputs.portal == 'true' ||
+       needs.detect-changes.outputs.cash-flow == 'true' ||
+       needs.detect-changes.outputs.book-registration == 'true' ||
+       needs.detect-changes.outputs.comp-time == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+      - run: npm install -g @google/clasp
+      - name: Authenticate clasp
+        env:
+          CLASP_AUTH: ${{ secrets.CLASP_AUTH }}
+        run: echo "$CLASP_AUTH" > ~/.clasprc.json
+      - name: Inject web app URLs into Index.html
+        working-directory: portal
+        env:
+          # Prefer the URL produced by the upstream deploy job in this run;
+          # fall back to the stable repository variable when that app was
+          # not part of this run (its deploy job was skipped).
+          URL_CASH_FLOW: ${{ needs.deploy-cash-flow.outputs.webapp-url || vars.WEBAPP_URL_CASH_FLOW }}
+          URL_COMP_TIME: ${{ needs.deploy-comp-time.outputs.webapp-url || vars.WEBAPP_URL_COMP_TIME }}
+          URL_BOOK_REGISTRATION: ${{ needs.deploy-book-registration.outputs.webapp-url || vars.WEBAPP_URL_BOOK_REGISTRATION }}
+        run: |
+          if [ -n "$URL_CASH_FLOW" ]; then
+            sed -i "s|REPLACE_WITH_CASHFLOW_WEBAPP_URL|${URL_CASH_FLOW}|g" Index.html
+          fi
+          if [ -n "$URL_COMP_TIME" ]; then
+            sed -i "s|REPLACE_WITH_COMPTIME_WEBAPP_URL|${URL_COMP_TIME}|g" Index.html
+          fi
+          if [ -n "$URL_BOOK_REGISTRATION" ]; then
+            sed -i "s|REPLACE_WITH_LIBRARY_WEBAPP_URL|${URL_BOOK_REGISTRATION}|g" Index.html
+          fi
+      - name: Create clasp project config
+        env:
+          SCRIPT_ID: ${{ secrets.CLASP_SCRIPT_ID_PORTAL }}
+        working-directory: portal
+        run: |
+          cat > .clasp.json << EOF
+          {
+            "scriptId": "${SCRIPT_ID}",
+            "rootDir": ""
+          }
+          EOF
+      - name: Push to Apps Script
+        working-directory: portal
+        run: clasp push --force
+      - name: Update versioned deployment
+        working-directory: portal
+        run: |
+          DEPLOY_ID=$(clasp deployments | grep -v '@HEAD' | grep '^- ' | tail -1 | awk '{print $2}')
+          echo "### portal" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$DEPLOY_ID" ]; then
+            clasp deploy -i "$DEPLOY_ID"
             echo "https://script.google.com/macros/s/${DEPLOY_ID}/exec" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "_No versioned deployment found._" >> "$GITHUB_STEP_SUMMARY"
