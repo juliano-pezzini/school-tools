@@ -76,6 +76,7 @@ Actions > **Variables**):
 | `WEBAPP_URL_CASH_FLOW`           | `https://script.google.com/macros/s/<id>/exec`     |
 | `WEBAPP_URL_COMP_TIME`           | `https://script.google.com/macros/s/<id>/exec`     |
 | `WEBAPP_URL_BOOK_REGISTRATION`   | `https://script.google.com/macros/s/<id>/exec`     |
+| `PORTAL_ALLOWED_EMAILS`          | comma-separated extra emails allowed beyond the domain (e.g. dev) |
 
 > These are **variables**, not secrets — the URLs are not sensitive. Apps Script
 > `/exec` URLs are stable per deployment, so you only set them once (copy from a

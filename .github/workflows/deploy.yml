@@ -270,7 +270,7 @@ jobs:
         env:
           CLASP_AUTH: ${{ secrets.CLASP_AUTH }}
         run: echo "$CLASP_AUTH" > ~/.clasprc.json
-      - name: Inject web app URLs into Index.html
+      - name: Inject config into portal files
         working-directory: portal
         env:
           # Prefer the URL produced by the upstream deploy job in this run;
@@ -279,6 +279,7 @@ jobs:
           URL_CASH_FLOW: ${{ needs.deploy-cash-flow.outputs.webapp-url || vars.WEBAPP_URL_CASH_FLOW }}
           URL_COMP_TIME: ${{ needs.deploy-comp-time.outputs.webapp-url || vars.WEBAPP_URL_COMP_TIME }}
           URL_BOOK_REGISTRATION: ${{ needs.deploy-book-registration.outputs.webapp-url || vars.WEBAPP_URL_BOOK_REGISTRATION }}
+          ALLOWED_EMAILS: ${{ vars.PORTAL_ALLOWED_EMAILS }}
         run: |
           if [ -n "$URL_CASH_FLOW" ]; then
             sed -i "s|REPLACE_WITH_CASHFLOW_WEBAPP_URL|${URL_CASH_FLOW}|g" Index.html
@@ -289,6 +290,7 @@ jobs:
           if [ -n "$URL_BOOK_REGISTRATION" ]; then
             sed -i "s|REPLACE_WITH_LIBRARY_WEBAPP_URL|${URL_BOOK_REGISTRATION}|g" Index.html
           fi
+          sed -i "s|REPLACE_WITH_ALLOWED_EMAILS|${ALLOWED_EMAILS}|g" Code.gs
       - name: Create clasp project config
         env:
           SCRIPT_ID: ${{ secrets.CLASP_SCRIPT_ID_PORTAL }}
