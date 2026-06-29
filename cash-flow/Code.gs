@@ -63,7 +63,7 @@ function nowStamp_() {
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('Fluxo de Caixa — APP')
-    .setFaviconUrl('https://cdn.jsdelivr.net/gh/juliano-pezzini/school-tools@main/cash-flow/favicon.svg')
+    .setFaviconUrl('https://cdn.jsdelivr.net/gh/juliano-pezzini/school-tools@main/cash-flow/favicon.png')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
