@@ -415,6 +415,7 @@
       }
 
       // ===== Saldo (mês selecionado) =====
+      var lastMonthState = null;  // último monthState renderizado (para UI otimista)
       function loadMonthState(){
         google.script.run
           .withSuccessHandler(renderMonthState)
@@ -422,6 +423,7 @@
           .getMonthState(selectedMonth);
       }
       function renderMonthState(s){
+        lastMonthState = s;
         var neg = Number(s.saldoFinal) < 0;
         el('saldoNum').textContent = fmtBRL(s.saldoFinal);
         el('saldoNum').classList.toggle('neg', neg);
@@ -547,22 +549,32 @@
         }
         btn.disabled = true;                 // anti-duplo-clique (complementa idempotência do servidor)
         if (editId) {
+          var _editId = editId, _item = item;
+          // Otimista: atualiza visualmente ANTES do servidor responder.
+          optimisticEdit(_editId, _item);
+          box('lResult','✅ Lançamento atualizado.','ok');
+          goToMonthOfBR(_item.data);
+          resetLancamentoForm();
+          btn.disabled = false;
           google.script.run
-            .withSuccessHandler(function(){ btn.disabled = false; box('lResult','✅ Lançamento atualizado.','ok'); goToMonthOfBR(item.data); resetLancamentoForm(); afterWrite(); })
-            .withFailureHandler(function(e){ btn.disabled = false; box('lResult','❌ '+esc(e.message),'err'); })
-            .editLancamento(editId, item);
+            .withSuccessHandler(function(){ refreshAll(); })
+            .withFailureHandler(function(e){ box('lResult','❌ '+esc(e.message),'err'); refreshAll(); })
+            .editLancamento(_editId, _item);
         } else {
+          var _item2 = item;
+          // Otimista: insere na grade ANTES do servidor responder.
+          optimisticAdd(_item2);
+          box('lResult','✅ Lançamento adicionado.','ok');
+          el('lValor').value = ''; el('lDescricao').value = '';
+          goToMonthOfBR(_item2.data);
+          btn.disabled = false;
           google.script.run
             .withSuccessHandler(function(){
-              btn.disabled = false;
-              clientToken = uuid();          // rotaciona o token após sucesso
-              box('lResult','✅ Lançamento adicionado.','ok');
-              el('lValor').value = ''; el('lDescricao').value = '';
-              goToMonthOfBR(item.data);      // garante que o novo lançamento fique visível
-              afterWrite();
+              clientToken = uuid();
+              refreshAll();
             })
-            .withFailureHandler(function(e){ btn.disabled = false; box('lResult','❌ '+esc(e.message),'err'); })
-            .addLancamento(item, clientToken); // mesmo token em retry → dedupe
+            .withFailureHandler(function(e){ box('lResult','❌ '+esc(e.message),'err'); refreshAll(); })
+            .addLancamento(item, clientToken);
         }
       }
       function startEdit(r){
@@ -589,6 +601,86 @@
         show('lCancelar', false);
       }
       function afterWrite(){ refreshAll(); }
+
+      /** Gera o HTML de uma <tr> a partir de um row serializado (Id, Data ISO, Tipo, etc.). */
+      function renderRowHtml(r){
+        return '<tr data-id="'+esc(r.Id)+'">'+
+          '<td>'+esc(dateToBR(r.Data))+'</td>'+
+          '<td><span class="tag '+esc(r.Tipo)+'">'+esc(r.Tipo)+'</span></td>'+
+          '<td>'+esc(r.Categoria)+'</td>'+
+          '<td class="num">'+fmtBRL(r.Valor)+'</td>'+
+          '<td>'+esc(r.Descricao)+'</td>'+
+          '<td class="actions">'+
+            '<button class="ghost" onclick="onEdit(\''+esc(r.Id)+'\')">editar</button>'+
+            '<button class="danger" onclick="onDelete(\''+esc(r.Id)+'\')">excluir</button>'+
+          '</td></tr>';
+      }
+
+      /** Atualiza o saldo otimisticamente dado um delta (positivo p/ entrada, negativo p/ saída). */
+      function optimisticSaldo(delta){
+        if (!lastMonthState) return;
+        var s = lastMonthState;
+        if (delta > 0) s.totalEntradas = Math.round((s.totalEntradas + delta) * 100) / 100;
+        else s.totalSaidas = Math.round((s.totalSaidas - delta) * 100) / 100;
+        s.saldoFinal = Math.round((s.saldoInicio + s.totalEntradas - s.totalSaidas) * 100) / 100;
+        renderMonthState(s);
+      }
+
+      /** Insere otimisticamente uma linha na grade (topo) e atualiza saldo. */
+      function optimisticAdd(item, id){
+        var n = parseValorBR(item.valor);
+        if (!isFinite(n)) return;
+        var r = { Id: id || 'tmp_'+Date.now(), Data: el('lData').value, Tipo: item.tipo, Categoria: item.categoria, Valor: n, Descricao: item.descricao };
+        ROWS[r.Id] = r;
+        var tbody = el('listTable').querySelector('tbody');
+        // Só insere se estamos no mês certo e filtros compatíveis.
+        var filtro = currentFiltro();
+        var rowMonth = r.Data ? r.Data.substring(0,7) : '';
+        if (rowMonth === selectedMonth &&
+            (!filtro.tipo || filtro.tipo === r.Tipo) &&
+            (!filtro.categoria || r.Categoria.toLowerCase().indexOf(filtro.categoria.toLowerCase()) !== -1)) {
+          show('listTable', true);
+          box('listResult', '', '');
+          tbody.insertAdjacentHTML('afterbegin', renderRowHtml(r));
+        }
+        var delta = (r.Tipo === 'entrada') ? n : -n;
+        optimisticSaldo(delta);
+      }
+
+      /** Atualiza otimisticamente uma linha editada na grade e recalcula saldo. */
+      function optimisticEdit(id, item){
+        var old = ROWS[id];
+        var n = parseValorBR(item.valor);
+        if (!old || !isFinite(n)) return;
+        // Reverte saldo do valor antigo.
+        var oldDelta = (old.Tipo === 'entrada') ? -old.Valor : old.Valor;
+        optimisticSaldo(oldDelta);
+        // Aplica saldo do valor novo.
+        var newDelta = (item.tipo === 'entrada') ? n : -n;
+        optimisticSaldo(newDelta);
+        // Atualiza o row em memória.
+        var r = { Id: id, Data: el('lData').value, Tipo: item.tipo, Categoria: item.categoria, Valor: n, Descricao: item.descricao };
+        ROWS[id] = r;
+        // Atualiza a <tr> no DOM.
+        var tr = el('listTable').querySelector('tr[data-id="'+id+'"]');
+        if (tr) tr.outerHTML = renderRowHtml(r);
+      }
+
+      /** Remove otimisticamente uma linha da grade e recalcula saldo. */
+      function optimisticDelete(id){
+        var old = ROWS[id];
+        if (!old) return;
+        var delta = (old.Tipo === 'entrada') ? -old.Valor : old.Valor;
+        optimisticSaldo(delta);
+        delete ROWS[id];
+        var tr = el('listTable').querySelector('tr[data-id="'+id+'"]');
+        if (tr) tr.remove();
+        // Se não restam linhas, mostra a mensagem vazia.
+        if (!el('listTable').querySelector('tbody tr')) {
+          show('listTable', false);
+          box('listResult', 'Nenhum lançamento para os filtros atuais.', 'ok');
+        }
+      }
 
       // ===== Lista + filtros =====
       function currentFiltro(){
@@ -620,24 +712,17 @@
         show('listTable', true);
         el('listTable').querySelector('tbody').innerHTML = rows.map(function(r){
           ROWS[r.Id] = r;
-          return '<tr>'+
-            '<td>'+esc(dateToBR(r.Data))+'</td>'+
-            '<td><span class="tag '+esc(r.Tipo)+'">'+esc(r.Tipo)+'</span></td>'+
-            '<td>'+esc(r.Categoria)+'</td>'+
-            '<td class="num">'+fmtBRL(r.Valor)+'</td>'+
-            '<td>'+esc(r.Descricao)+'</td>'+
-            '<td class="actions">'+
-              '<button class="ghost" onclick="onEdit(\''+esc(r.Id)+'\')">editar</button>'+
-              '<button class="danger" onclick="onDelete(\''+esc(r.Id)+'\')">excluir</button>'+
-            '</td></tr>';
+          return renderRowHtml(r);
         }).join('');
       }
       function onEdit(id){ if (ROWS[id]) startEdit(ROWS[id]); }
       function onDelete(id){
         if (!window.confirm('Excluir este lançamento? (exclusão lógica, auditada)')) return;
+        optimisticDelete(id);
+        box('listResult','✅ Lançamento excluído.','ok');
         google.script.run
-          .withSuccessHandler(function(){ box('listResult','✅ Lançamento excluído.','ok'); afterWrite(); })
-          .withFailureHandler(function(e){ box('listResult','❌ '+esc(e.message),'err'); })
+          .withSuccessHandler(function(){ refreshAll(); })
+          .withFailureHandler(function(e){ box('listResult','❌ '+esc(e.message),'err'); refreshAll(); })
           .deleteLancamento(id);
       }
 
