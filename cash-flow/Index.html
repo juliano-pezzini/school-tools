@@ -402,7 +402,17 @@
         el('gMes').value = keyToMonthBR(k);
         return true;
       }
-      function refreshAll(){ loadMonthState(); loadLancamentos(); loadCategorias(); loadFechamentoStatus(); }
+      function refreshAll(){
+        google.script.run
+          .withSuccessHandler(function(d){
+            renderMonthState(d.monthState);
+            renderLista(d.lancamentos);
+            renderCategorias(d.categorias);
+            applyClosedPeriods(d.closedPeriods);
+          })
+          .withFailureHandler(function(e){ box('saldoWarn', esc(e.message), 'err'); })
+          .getDashboard(currentFiltro(), selectedMonth);
+      }
 
       // ===== Saldo (mês selecionado) =====
       function loadMonthState(){
@@ -486,11 +496,12 @@
       document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && !el('abModal').classList.contains('hidden')) closeAbModal(); });
 
       // ===== Categorias (autocomplete) =====
+      function renderCategorias(cats){
+        el('catList').innerHTML = (cats || []).map(function(c){ return '<option value="'+esc(c)+'"></option>'; }).join('');
+      }
       function loadCategorias(){
         google.script.run
-          .withSuccessHandler(function(cats){
-            el('catList').innerHTML = (cats || []).map(function(c){ return '<option value="'+esc(c)+'"></option>'; }).join('');
-          })
+          .withSuccessHandler(renderCategorias)
           .withFailureHandler(function(){ /* autocomplete é opcional */ })
           .listCategorias();
       }
@@ -631,13 +642,14 @@
       }
 
       // ===== Fechamento (inline no seletor de mês) =====
+      function applyClosedPeriods(list){
+        closedSet = {};
+        (list || []).forEach(function(p){ closedSet[p.periodo] = p; });
+        renderFechamentoStatus();
+      }
       function loadFechamentoStatus(){
         google.script.run
-          .withSuccessHandler(function(list){
-            closedSet = {};
-            (list || []).forEach(function(p){ closedSet[p.periodo] = p; });
-            renderFechamentoStatus();
-          })
+          .withSuccessHandler(applyClosedPeriods)
           .withFailureHandler(function(){})
           .listClosedPeriods();
       }

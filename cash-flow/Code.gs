@@ -32,6 +32,16 @@ var ROLES = ['admin', 'tesoureiro', 'leitor'];
 var LOCK_TIMEOUT_MS = 20000;       // espera máxima pelo lock de escrita
 var IDEMPOTENCY_TTL_S = 21600;     // 6 h de cache de clientToken
 
+var _ssCache = null; // memoização por-execução de getSpreadsheet_
+
+// TTLs do CacheService para abas de baixa mutação (segundos).
+var CACHE_TTL_USERS = 60;          // Usuarios: raramente muda
+var CACHE_TTL_CONFIG = 60;         // Config: muda só em set/update/clearOpening
+var CACHE_TTL_FECH = 120;          // Fechamentos: muda só em close/reopenMonth
+var CACHE_KEY_USERS = 'c_users';
+var CACHE_KEY_CONFIG = 'c_config';
+var CACHE_KEY_FECH = 'c_fech';
+
 // ===========================================================================
 // Helpers de relógio (servidor, TZ America/Sao_Paulo)
 // ===========================================================================
@@ -77,13 +87,15 @@ function doGet() {
  * Na 1ª execução cria a planilha e as 5 abas, e persiste o id.
  */
 function getSpreadsheet_() {
+  if (_ssCache) return _ssCache;
   var props = PropertiesService.getScriptProperties();
   var id = props.getProperty(PROP_SHEET_ID);
   if (id) {
     // Já existe uma planilha configurada: NUNCA criar outra silenciosamente
     // (isso "orfanaria" os dados). Falha de abertura vira erro explícito.
     try {
-      return SpreadsheetApp.openById(id);
+      _ssCache = SpreadsheetApp.openById(id);
+      return _ssCache;
     } catch (e) {
       throw new Error('Não foi possível abrir a planilha de dados (id ' + id +
         '). Verifique o acesso ou ajuste a propriedade ' + PROP_SHEET_ID +
@@ -94,7 +106,8 @@ function getSpreadsheet_() {
   var ss = SpreadsheetApp.create('Fluxo de Caixa — APP (dados)');
   buildSheets_(ss);
   props.setProperty(PROP_SHEET_ID, ss.getId());
-  return ss;
+  _ssCache = ss;
+  return _ssCache;
 }
 
 /**
@@ -248,8 +261,13 @@ function requireRole_(allowed) {
   return { email: email, role: role };
 }
 
-/** Mapa email → { name, role } a partir da aba Usuarios. */
+/** Mapa email → { name, role } a partir da aba Usuarios (com cache). */
 function getUsers_() {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get(CACHE_KEY_USERS);
+  if (cached) {
+    try { return JSON.parse(cached); } catch (e) { /* parse falhou, relê */ }
+  }
   var rows = getSheet_(SH_USERS).getDataRange().getValues();
   var map = {};
   for (var i = 1; i < rows.length; i++) {
@@ -259,6 +277,7 @@ function getUsers_() {
       role: String(rows[i][2]).toLowerCase()
     };
   }
+  cache.put(CACHE_KEY_USERS, JSON.stringify(map), CACHE_TTL_USERS);
   return map;
 }
 
@@ -270,6 +289,7 @@ function countAdmins_(users) {
 
 function addUser_(email, name, role) {
   getSheet_(SH_USERS).appendRow([String(email).toLowerCase(), name, role]);
+  CacheService.getScriptCache().remove(CACHE_KEY_USERS);
 }
 
 /**
@@ -347,13 +367,8 @@ function readLancamentoRows_() {
 
 /** Lista de períodos `YYYY-MM` atualmente fechados (Status = `fechado`). */
 function closedPeriods_() {
-  var values = getSheet_(SH_FECH).getDataRange().getValues();
-  var out = [];
-  for (var i = 1; i < values.length; i++) {
-    if (!values[i][0]) continue;
-    if (String(values[i][1]).toLowerCase() === 'fechado') out.push(String(values[i][0]));
-  }
-  return out;
+  // Reutiliza listClosedPeriodsData_ (já cacheada) para evitar leitura extra.
+  return listClosedPeriodsData_().map(function (p) { return p.periodo; });
 }
 
 /** Anexa um registro append-only à trilha de Auditoria (sempre dentro do lock). */
@@ -492,14 +507,20 @@ function deleteLancamento(id) {
 // Config (key-value) — leitura e escrita
 // ===========================================================================
 
-/** Mapa Chave→Valor da aba Config. */
+/** Mapa Chave→Valor da aba Config (com cache). */
 function readConfigMap_() {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get(CACHE_KEY_CONFIG);
+  if (cached) {
+    try { return JSON.parse(cached); } catch (e) { /* parse falhou, relê */ }
+  }
   var values = getSheet_(SH_CONFIG).getDataRange().getValues();
   var map = {};
   for (var i = 1; i < values.length; i++) {
     if (!values[i][0]) continue;
     map[String(values[i][0])] = values[i][1];
   }
+  cache.put(CACHE_KEY_CONFIG, JSON.stringify(map), CACHE_TTL_CONFIG);
   return map;
 }
 
@@ -513,10 +534,12 @@ function setConfigValue_(key, val, who, stamp) {
   for (var i = 1; i < values.length; i++) {
     if (String(values[i][0]) === key) {
       sheet.getRange(i + 1, 2, 1, 3).setValues([[val, who, stamp]]);
+      CacheService.getScriptCache().remove(CACHE_KEY_CONFIG);
       return;
     }
   }
   sheet.appendRow([key, val, who, stamp]);
+  CacheService.getScriptCache().remove(CACHE_KEY_CONFIG);
 }
 
 /**
@@ -529,6 +552,7 @@ function deleteConfigKey_(key) {
   for (var i = values.length - 1; i >= 1; i--) {
     if (String(values[i][0]) === key) {
       sheet.deleteRow(i + 1);
+      CacheService.getScriptCache().remove(CACHE_KEY_CONFIG);
       return true;
     }
   }
@@ -554,22 +578,7 @@ function aberturaConfig_() {
 /** Lista de lançamentos para a UI (oculta excluídos, ordena/filtra). LANC-04/09/11. */
 function listLancamentos(filtro) {
   requireRole_(['admin', 'tesoureiro', 'leitor']);
-  var rows = listForView_(readLancamentoRows_(), filtro || {});
-  // google.script.run não serializa Date — converte para string ISO antes de devolver.
-  return rows.map(function (r) {
-    var d = r.Data;
-    var dataISO = (d instanceof Date && !isNaN(d.getTime()))
-      ? d.getFullYear() + '-' + pad2_(d.getMonth() + 1) + '-' + pad2_(d.getDate())
-      : '';
-    return {
-      Id: r.Id,
-      Data: dataISO,
-      Tipo: r.Tipo,
-      Categoria: r.Categoria,
-      Valor: r.Valor,
-      Descricao: r.Descricao
-    };
-  });
+  return serializeRows_(listForView_(readLancamentoRows_(), filtro || {}));
 }
 
 /** Estado do caixa (abertura + totais + saldo corrente, ignora excluídos). LANC-03. */
@@ -588,6 +597,70 @@ function getMonthState(mes) {
 function listCategorias() {
   requireRole_(['admin', 'tesoureiro', 'leitor']);
   return computeCategorias_(readLancamentoRows_());
+}
+
+// ===========================================================================
+// Dashboard consolidado — 1 round-trip para o refresh completo da UI
+// ===========================================================================
+
+/** Serializa rows de lançamento (Date → ISO string) para transporte ao cliente. */
+function serializeRows_(rows) {
+  return rows.map(function (r) {
+    var d = r.Data;
+    var dataISO = (d instanceof Date && !isNaN(d.getTime()))
+      ? d.getFullYear() + '-' + pad2_(d.getMonth() + 1) + '-' + pad2_(d.getDate())
+      : '';
+    return {
+      Id: r.Id,
+      Data: dataISO,
+      Tipo: r.Tipo,
+      Categoria: r.Categoria,
+      Valor: r.Valor,
+      Descricao: r.Descricao
+    };
+  });
+}
+
+/** Dados de períodos fechados (sem requireRole_, para uso interno; com cache). */
+function listClosedPeriodsData_() {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get(CACHE_KEY_FECH);
+  if (cached) {
+    try { return JSON.parse(cached); } catch (e) { /* parse falhou, relê */ }
+  }
+  var values = getSheet_(SH_FECH).getDataRange().getValues();
+  var out = [];
+  for (var i = 1; i < values.length; i++) {
+    if (!values[i][0]) continue;
+    if (String(values[i][1]).toLowerCase() !== 'fechado') continue;
+    out.push({
+      periodo: String(values[i][0]),
+      status: 'fechado',
+      fechadoPor: String(values[i][2] || ''),
+      fechadoEm: String(values[i][3] || ''),
+      reabertoPor: String(values[i][4] || ''),
+      reabertoEm: String(values[i][5] || '')
+    });
+  }
+  cache.put(CACHE_KEY_FECH, JSON.stringify(out), CACHE_TTL_FECH);
+  return out;
+}
+
+/**
+ * Endpoint consolidado: devolve monthState + lancamentos + categorias +
+ * closedPeriods em uma única chamada, lendo Lancamentos uma só vez.
+ * Substitui os 4 round-trips individuais do refreshAll do cliente.
+ */
+function getDashboard(filtro, mes) {
+  requireRole_(['admin', 'tesoureiro', 'leitor']);
+  var rows = readLancamentoRows_();
+  var abertura = aberturaConfig_();
+  return {
+    monthState: computeMonthState_(abertura, rows, String(mes)),
+    lancamentos: serializeRows_(listForView_(rows, filtro || {})),
+    categorias: computeCategorias_(rows),
+    closedPeriods: listClosedPeriodsData_()
+  };
 }
 
 // ===========================================================================
@@ -777,6 +850,7 @@ function closeMonth(periodo) {
     } else {
       sheet.appendRow([periodo, 'fechado', who.email, stamp, '', '']);
     }
+    CacheService.getScriptCache().remove(CACHE_KEY_FECH);
     appendAudit_('editar', 'fechamento:' + periodo, JSON.stringify({ acao: 'fechar', periodo: periodo }));
     return { ok: true };
   });
@@ -799,6 +873,7 @@ function reopenMonth(periodo) {
     var sheet = getSheet_(SH_FECH);
     sheet.getRange(found.row, 2).setValue('aberto');
     sheet.getRange(found.row, 5, 1, 2).setValues([[who.email, stamp]]);
+    CacheService.getScriptCache().remove(CACHE_KEY_FECH);
     appendAudit_('editar', 'fechamento:' + periodo, JSON.stringify({ acao: 'reabrir', periodo: periodo }));
     return { ok: true };
   });
