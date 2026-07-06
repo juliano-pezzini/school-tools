@@ -179,13 +179,35 @@
       /* month bar */
       .month-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
       .month-bar .month-nav { display: flex; align-items: center; gap: 6px; }
-      .month-bar .month-nav input { width: 110px; text-align: center; }
+      .month-bar .month-nav input { width: 160px; text-align: center; }
       .month-bar .month-nav button { padding: 8px 10px; font-size: .85rem; }
       .month-bar .fech-controls { display: flex; align-items: center; gap: 8px; }
       .month-bar .fech-status { font-size: .82rem; }
+      /* global status indicator */
+      .global-status {
+        position: fixed; top: 12px; right: 14px; z-index: 200;
+        display: flex; align-items: center; gap: 6px;
+        background: var(--brand); color: #fff;
+        font-size: .78rem; font-weight: 600; letter-spacing: .02em;
+        padding: 6px 14px; border-radius: 999px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.18);
+        opacity: 0; transform: translateY(-8px);
+        transition: opacity .2s, transform .2s;
+        pointer-events: none;
+      }
+      .global-status.visible { opacity: 1; transform: translateY(0); }
+      .global-status .gs-spinner {
+        width: 12px; height: 12px; border: 2px solid rgba(255,255,255,.35);
+        border-top-color: #fff; border-radius: 50%;
+        animation: gs-spin .6s linear infinite;
+      }
+      @keyframes gs-spin { to { transform: rotate(360deg); } }
     </style>
   </head>
   <body>
+    <div id="globalStatus" class="global-status" role="status" aria-live="polite">
+      <span class="gs-spinner"></span><span id="gsLabel"></span>
+    </div>
     <header class="page-header">
       <div class="page-header-inner">
         <div class="page-header-label">Ferramentas Escolares</div>
@@ -199,10 +221,7 @@
     <div class="month-bar">
       <div class="month-nav">
         <button type="button" class="ghost" onclick="changeMonth(-1)" title="Mês anterior">◀</button>
-        <input id="gMes" type="text" placeholder="mm/aaaa" maxlength="7"
-               onchange="onMonthChange()"
-               oninput="onMonthInput()"
-               onkeydown="if(event.key==='Enter'){event.preventDefault();onMonthChange();}" />
+        <input id="gMes" type="month" onchange="onMonthChange()" />
         <button type="button" class="ghost" onclick="changeMonth(1)" title="Próximo mês">▶</button>
       </div>
       <div class="fech-controls">
@@ -295,8 +314,8 @@
           <input id="abValor" inputmode="decimal" placeholder="Ex.: 1.000,00" />
         </div>
         <div class="field">
-          <label for="abData">Data de abertura (dd/mm/aaaa)</label>
-          <input id="abData" type="text" placeholder="dd/mm/aaaa" maxlength="10" />
+          <label for="abData">Data de abertura</label>
+          <input id="abData" type="date" />
         </div>
         <div id="abResult"></div>
         <div class="modal-footer">
@@ -308,6 +327,62 @@
     </div>
 
     <script>
+      // ---- client-side validation (mirrored from logic.js) ----
+      var CATEGORIA_MAX = 60;
+      var DESCRICAO_MAX = 280;
+      function validateLancamentoClient_(params) {
+        params = params || {};
+        if (!params.dateISO) return 'Informe uma data.';
+        if (params.dateISO > params.todayISO) return 'Não é possível lançar com data futura.';
+        var periodo = params.dateISO.substring(0, 7);
+        var closed = params.closedPeriods || [];
+        for (var i = 0; i < closed.length; i++) {
+          if (closed[i] === periodo) {
+            var lbl = periodo.split('-');
+            return 'O período ' + lbl[1] + '/' + lbl[0] + ' está fechado. Reabra-o para alterar.';
+          }
+        }
+        if (params.isEdit && params.originDateISO) {
+          var origPeriodo = params.originDateISO.substring(0, 7);
+          for (var j = 0; j < closed.length; j++) {
+            if (closed[j] === origPeriodo) {
+              var ol = origPeriodo.split('-');
+              return 'O período ' + ol[1] + '/' + ol[0] + ' está fechado. Reabra-o para alterar.';
+            }
+          }
+        }
+        var valStr = String(params.valor == null ? '' : params.valor).trim();
+        if (valStr === '') return 'Informe um valor maior que zero, com até dois centavos.';
+        var normStr = valStr;
+        if (normStr.indexOf(',') !== -1) {
+          normStr = normStr.replace(/\./g, '').replace(',', '.');
+        } else if ((normStr.split('.').length - 1) > 1) {
+          normStr = normStr.replace(/\./g, '');
+        }
+        var n = Number(normStr);
+        if (!isFinite(n) || n <= 0) return 'Informe um valor maior que zero, com até dois centavos.';
+        var dotIdx = normStr.indexOf('.');
+        if (dotIdx !== -1 && normStr.length - dotIdx - 1 > 2) {
+          return 'Informe um valor maior que zero, com até dois centavos.';
+        }
+        if ((params.categoria || '').length > CATEGORIA_MAX) return 'Categoria muito longa (máximo de 60 caracteres).';
+        if ((params.descricao || '').length > DESCRICAO_MAX) return 'Descrição muito longa (máximo de 280 caracteres).';
+        return '';
+      }
+      function validateDeleteClient_(dateISO, closedPeriods) {
+        if (!dateISO) return '';
+        var periodo = dateISO.substring(0, 7);
+        var closed = closedPeriods || [];
+        for (var i = 0; i < closed.length; i++) {
+          if (closed[i] === periodo) {
+            var lbl = periodo.split('-');
+            return 'O período ' + lbl[1] + '/' + lbl[0] + ' está fechado. Reabra-o para alterar.';
+          }
+        }
+        return '';
+      }
+    </script>
+    <script>
       // ---- formatação / helpers ----
       var BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
       function el(id){ return document.getElementById(id); }
@@ -315,6 +390,45 @@
       function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
       function show(id,on){ el(id).classList.toggle('hidden', !on); }
       function box(id,msg,cls){ el(id).innerHTML = msg ? '<div class="result '+cls+'">'+msg+'</div>' : ''; }
+
+      // ---- global status (working indicator) ----
+      var _inflight = 0, _showTimer = null, _hideTimer = null;
+      function beginWork(label){
+        _inflight++;
+        if (_hideTimer) { clearTimeout(_hideTimer); _hideTimer = null; }
+        el('gsLabel').textContent = label || 'Trabalhando…';
+        if (!_showTimer && !el('globalStatus').classList.contains('visible')) {
+          _showTimer = setTimeout(function(){
+            _showTimer = null;
+            if (_inflight > 0) el('globalStatus').classList.add('visible');
+          }, 150);
+        }
+      }
+      function endWork(){
+        _inflight = Math.max(0, _inflight - 1);
+        if (_inflight === 0) {
+          if (_showTimer) { clearTimeout(_showTimer); _showTimer = null; }
+          if (!_hideTimer) {
+            _hideTimer = setTimeout(function(){
+              _hideTimer = null;
+              el('globalStatus').classList.remove('visible');
+            }, 250);
+          }
+        }
+      }
+      /** Wrapper: gsRun(label, successFn, failureFn) → runner with .method(args) */
+      function gsRun(label, onOk, onErr){
+        beginWork(label);
+        var done = false;
+        function finish(fn, arg){
+          if (done) return; done = true;
+          endWork();
+          if (fn) fn(arg);
+        }
+        return google.script.run
+          .withSuccessHandler(function(r){ finish(onOk, r); })
+          .withFailureHandler(function(e){ finish(onErr, e); });
+      }
 
       // Gerador de UUID (idempotência): crypto.randomUUID com fallback.
       function uuid(){
@@ -367,29 +481,29 @@
         return (p.length === 2) ? (p[1]+'/'+p[0]) : k;
       }
       function initMonth(){
-        el('gMes').value = todayMonthBR();
-        selectedMonth = mesBRtoKey(el('gMes').value);
+        var d = new Date();
+        selectedMonth = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+        el('gMes').value = selectedMonth;
+        applyDateConstraints();
       }
       function onMonthChange(){
-        var k = mesBRtoKey(el('gMes').value);
+        var k = el('gMes').value;          // YYYY-MM (native month input)
         if (!k) return;
         if (k === selectedMonth) return;   // nada mudou
         selectedMonth = k;
+        applyDateConstraints();
         refreshAll();
       }
-      function onMonthInput(){
-        var v = el('gMes').value;
-        if (/^\d{2}\/\d{4}$/.test(v)) onMonthChange();
-      }
       function changeMonth(delta){
-        var k = selectedMonth || mesBRtoKey(el('gMes').value);
+        var k = selectedMonth || el('gMes').value;
         if (!k) return;
         var p = k.split('-');
         var y = parseInt(p[0],10), m = parseInt(p[1],10) + delta;
         if (m < 1){ m = 12; y--; }
         if (m > 12){ m = 1; y++; }
         selectedMonth = y+'-'+String(m).padStart(2,'0');
-        el('gMes').value = keyToMonthBR(selectedMonth);
+        el('gMes').value = selectedMonth;
+        applyDateConstraints();
         refreshAll();
       }
       // Pula o seletor para o mês de uma data 'dd/MM/yyyy' (ex.: após gravar).
@@ -399,28 +513,43 @@
         var k = p[2]+'-'+p[1];
         if (k === selectedMonth) return false;
         selectedMonth = k;
-        el('gMes').value = keyToMonthBR(k);
+        el('gMes').value = k;
+        applyDateConstraints();
         return true;
       }
+      // Restringe o date picker (#lData) ao mês selecionado.
+      function applyDateConstraints(){
+        if (!selectedMonth) return;
+        var p = selectedMonth.split('-');
+        var y = parseInt(p[0],10), m = parseInt(p[1],10);
+        var firstDay = y+'-'+String(m).padStart(2,'0')+'-01';
+        var lastDay = new Date(y, m, 0).getDate();
+        var lastDayStr = y+'-'+String(m).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
+        el('lData').min = firstDay;
+        el('lData').max = lastDayStr;
+        var cur = el('lData').value;
+        if (cur && (cur < firstDay || cur > lastDayStr)) {
+          el('lData').value = '';
+        }
+      }
       function refreshAll(){
-        google.script.run
-          .withSuccessHandler(function(d){
+        gsRun('Carregando…',
+          function(d){
             renderMonthState(d.monthState);
             renderLista(d.lancamentos);
             renderCategorias(d.categorias);
             applyClosedPeriods(d.closedPeriods);
-          })
-          .withFailureHandler(function(e){ box('saldoWarn', esc(e.message), 'err'); })
-          .getDashboard(currentFiltro(), selectedMonth);
+          },
+          function(e){ box('saldoWarn', esc(e.message), 'err'); }
+        ).getDashboard(currentFiltro(), selectedMonth);
       }
 
       // ===== Saldo (mês selecionado) =====
       var lastMonthState = null;  // último monthState renderizado (para UI otimista)
       function loadMonthState(){
-        google.script.run
-          .withSuccessHandler(renderMonthState)
-          .withFailureHandler(function(e){ box('saldoWarn', esc(e.message), 'err'); })
-          .getMonthState(selectedMonth);
+        gsRun('Carregando…', renderMonthState,
+          function(e){ box('saldoWarn', esc(e.message), 'err'); }
+        ).getMonthState(selectedMonth);
       }
       function renderMonthState(s){
         lastMonthState = s;
@@ -454,45 +583,55 @@
         el('abBtn').textContent = 'Registrar';
         show('abModal', true);
         // Pre-fill if editing
-        google.script.run
-          .withSuccessHandler(function(ob){
+        gsRun('Carregando…',
+          function(ob){
             abDefined = ob.definida;
             if (ob.definida) {
               el('abValor').value = String(ob.valor).replace('.', ',');
-              // ob.data já vem dd/mm/aaaa do servidor
-              if (ob.data) el('abData').value = ob.data;
+              // ob.data vem do servidor (pode ser dd/mm/aaaa ou Date serializado)
+              if (ob.data) {
+                var isoVal = dateToInput(ob.data);
+                if (!isoVal) {
+                  // fallback: tentar dd/mm/aaaa manual
+                  var dp = String(ob.data).split('/');
+                  if (dp.length === 3) isoVal = dp[2]+'-'+dp[1]+'-'+dp[0];
+                }
+                if (isoVal) el('abData').value = isoVal;
+              }
               el('abBtn').textContent = 'Salvar';
               el('abModalTitle').textContent = 'Editar saldo de abertura';
               show('abRemover', true);
             }
-          })
-          .withFailureHandler(function(){})
-          .getOpeningBalance();
+          },
+          function(){}
+        ).getOpeningBalance();
       }
       function closeAbModal(){ show('abModal', false); }
       function saveAbertura(){
         var btn = el('abBtn');
         btn.disabled = true;
-        var opts = { valor: el('abValor').value, data: el('abData').value };  // já em dd/mm/aaaa
+        var abDateVal = el('abData').value;  // yyyy-MM-dd
+        var abDateBR = abDateVal ? inputDateToBR(abDateVal) : '';
+        var opts = { valor: el('abValor').value, data: abDateBR };
         var fn = abDefined ? 'updateOpeningBalance' : 'setOpeningBalance';
-        google.script.run
-          .withSuccessHandler(function(){
+        gsRun('Salvando…',
+          function(){
             box('abResult','✅ Saldo de abertura '+(abDefined?'atualizado':'registrado')+'.','ok');
             setTimeout(function(){ closeAbModal(); loadMonthState(); }, 800);
-          })
-          .withFailureHandler(function(e){ btn.disabled = false; box('abResult','❌ '+esc(e.message),'err'); })
-          [fn](opts);
+          },
+          function(e){ btn.disabled = false; box('abResult','❌ '+esc(e.message),'err'); }
+        )[fn](opts);
       }
       function removeAbertura(){
         if (!confirm('Remover o saldo de abertura? O valor voltará a ser tratado como R$ 0,00.')) return;
         el('abRemover').disabled = true;
-        google.script.run
-          .withSuccessHandler(function(){
+        gsRun('Salvando…',
+          function(){
             box('abResult','✅ Saldo de abertura removido.','ok');
             setTimeout(function(){ closeAbModal(); loadMonthState(); }, 800);
-          })
-          .withFailureHandler(function(e){ el('abRemover').disabled = false; box('abResult','❌ '+esc(e.message),'err'); })
-          .clearOpeningBalance();
+          },
+          function(e){ el('abRemover').disabled = false; box('abResult','❌ '+esc(e.message),'err'); }
+        ).clearOpeningBalance();
       }
       // ESC to close modal
       document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && !el('abModal').classList.contains('hidden')) closeAbModal(); });
@@ -502,15 +641,13 @@
         el('catList').innerHTML = (cats || []).map(function(c){ return '<option value="'+esc(c)+'"></option>'; }).join('');
       }
       function loadCategorias(){
-        google.script.run
-          .withSuccessHandler(renderCategorias)
-          .withFailureHandler(function(){ /* autocomplete é opcional */ })
-          .listCategorias();
+        gsRun('Carregando…', renderCategorias, function(){}).listCategorias();
       }
 
       // ===== Lançamento (criar/editar) =====
       var VALOR_TETO = 1000000;   // teto técnico (R$ 1.000.000,00) — acima exige confirmação na UI.
-      // Espelha parseMoney_ do servidor o suficiente para a checagem de teto.
+      // Espelha parseMoney_ do servidor: normaliza string BR → número.
+      // Retorna NaN se inválido.
       function parseValorBR(raw){
         if (raw == null) return NaN;
         var s = String(raw).trim();
@@ -522,6 +659,28 @@
         }
         var n = Number(s);
         return isFinite(n) ? n : NaN;
+      }
+
+      // ---- Pré-validação client-side (delega para validateLancamentoClient_ de logic.js) ----
+      // Retorna string de erro ou '' se ok.
+      function validateClient(item, opts) {
+        opts = opts || {};
+        var hoje;
+        try {
+          hoje = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+        } catch (_) {
+          var d = new Date(); hoje = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        }
+        return validateLancamentoClient_({
+          dateISO: el('lData').value,
+          todayISO: hoje,
+          closedPeriods: Object.keys(closedSet),
+          valor: item.valor,
+          categoria: item.categoria,
+          descricao: item.descricao,
+          isEdit: !!opts.isEdit,
+          originDateISO: opts.originDateISO || ''
+        });
       }
       // Converte 'yyyy-MM-dd' (input date) → 'dd/MM/yyyy' (servidor).
       function inputDateToBR(v){
@@ -541,6 +700,10 @@
       function submitLancamento(){
         var btn = el('lSalvar');
         var item = buildItem();
+        // Pré-validação client-side: bloqueia ANTES do update otimista.
+        var originISO = (editId && ROWS[editId]) ? dateToInput(ROWS[editId].Data) : null;
+        var valErr = validateClient(item, { isEdit: !!editId, originDateISO: originISO });
+        if (valErr) { box('lResult', '❌ ' + esc(valErr), 'err'); return; }
         // Teto técnico: exige confirmação explícita antes de gravar (LANC, anti fat-finger).
         var n = parseValorBR(item.valor);
         if (isFinite(n) && n > VALOR_TETO &&
@@ -556,10 +719,10 @@
           goToMonthOfBR(_item.data);
           resetLancamentoForm();
           btn.disabled = false;
-          google.script.run
-            .withSuccessHandler(function(){ refreshAll(); })
-            .withFailureHandler(function(e){ box('lResult','❌ '+esc(e.message),'err'); refreshAll(); })
-            .editLancamento(_editId, _item);
+          gsRun('Confirmando…',
+            function(){ refreshAll(); },
+            function(e){ box('lResult','❌ '+esc(e.message),'err'); refreshAll(); }
+          ).editLancamento(_editId, _item);
         } else {
           var _item2 = item;
           // Otimista: insere na grade ANTES do servidor responder.
@@ -568,13 +731,13 @@
           el('lValor').value = ''; el('lDescricao').value = '';
           goToMonthOfBR(_item2.data);
           btn.disabled = false;
-          google.script.run
-            .withSuccessHandler(function(){
+          gsRun('Confirmando…',
+            function(){
               clientToken = uuid();
               refreshAll();
-            })
-            .withFailureHandler(function(e){ box('lResult','❌ '+esc(e.message),'err'); refreshAll(); })
-            .addLancamento(item, clientToken);
+            },
+            function(e){ box('lResult','❌ '+esc(e.message),'err'); refreshAll(); }
+          ).addLancamento(item, clientToken);
         }
       }
       function startEdit(r){
@@ -695,10 +858,9 @@
         loadLancamentos();
       }
       function loadLancamentos(){
-        google.script.run
-          .withSuccessHandler(renderLista)
-          .withFailureHandler(function(e){ show('listTable', false); box('listResult', esc(e.message), 'err'); })
-          .listLancamentos(currentFiltro());
+        gsRun('Carregando…', renderLista,
+          function(e){ show('listTable', false); box('listResult', esc(e.message), 'err'); }
+        ).listLancamentos(currentFiltro());
       }
       var ROWS = {};
       function renderLista(rows){
@@ -717,13 +879,23 @@
       }
       function onEdit(id){ if (ROWS[id]) startEdit(ROWS[id]); }
       function onDelete(id){
+        // Pré-checar período fechado antes do delete otimista.
+        var row = ROWS[id];
+        if (row) {
+          var rISO = dateToInput(row.Data);
+          var delErr = validateDeleteClient_(rISO, Object.keys(closedSet));
+          if (delErr) {
+            box('listResult', '❌ ' + esc(delErr), 'err');
+            return;
+          }
+        }
         if (!window.confirm('Excluir este lançamento? (exclusão lógica, auditada)')) return;
         optimisticDelete(id);
         box('listResult','✅ Lançamento excluído.','ok');
-        google.script.run
-          .withSuccessHandler(function(){ refreshAll(); })
-          .withFailureHandler(function(e){ box('listResult','❌ '+esc(e.message),'err'); refreshAll(); })
-          .deleteLancamento(id);
+        gsRun('Excluindo…',
+          function(){ refreshAll(); },
+          function(e){ box('listResult','❌ '+esc(e.message),'err'); refreshAll(); }
+        ).deleteLancamento(id);
       }
 
       // ===== Fechamento (inline no seletor de mês) =====
@@ -733,10 +905,7 @@
         renderFechamentoStatus();
       }
       function loadFechamentoStatus(){
-        google.script.run
-          .withSuccessHandler(applyClosedPeriods)
-          .withFailureHandler(function(){})
-          .listClosedPeriods();
+        gsRun('Carregando…', applyClosedPeriods, function(){}).listClosedPeriods();
       }
       function renderFechamentoStatus(){
         var info = closedSet[selectedMonth];
@@ -758,15 +927,15 @@
         var btn = el('fechToggle');
         btn.disabled = true;
         if (info) {
-          google.script.run
-            .withSuccessHandler(function(){ btn.disabled = false; refreshAll(); })
-            .withFailureHandler(function(e){ btn.disabled = false; alert('❌ '+e.message); })
-            .reopenMonth(selectedMonth);
+          gsRun('Processando…',
+            function(){ btn.disabled = false; refreshAll(); },
+            function(e){ btn.disabled = false; alert('❌ '+e.message); }
+          ).reopenMonth(selectedMonth);
         } else {
-          google.script.run
-            .withSuccessHandler(function(){ btn.disabled = false; refreshAll(); })
-            .withFailureHandler(function(e){ btn.disabled = false; alert('❌ '+e.message); })
-            .closeMonth(selectedMonth);
+          gsRun('Processando…',
+            function(){ btn.disabled = false; refreshAll(); },
+            function(e){ btn.disabled = false; alert('❌ '+e.message); }
+          ).closeMonth(selectedMonth);
         }
       }
 

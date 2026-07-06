@@ -418,7 +418,7 @@ function addLancamento(item, clientToken) {
 
     var id = Utilities.getUuid();
     getSheet_(SH_LANC).appendRow([
-      id, formatDate_(data), clean.tipo, clean.categoria, clean.valor, clean.descricao,
+      id, data, clean.tipo, clean.categoria, clean.valor, clean.descricao,
       who.email, nowStamp_(), '', '', false, '', '', String(clientToken)
     ]);
     cache.put('tok_' + clientToken, id, IDEMPOTENCY_TTL_S);
@@ -474,7 +474,7 @@ function editLancamento(id, item) {
     var antes = resumoRow_(current);
     var sheet = getSheet_(SH_LANC);
     sheet.getRange(current._row, 2, 1, 5)
-      .setValues([[formatDate_(novaData), clean.tipo, clean.categoria, clean.valor, clean.descricao]]);
+      .setValues([[novaData, clean.tipo, clean.categoria, clean.valor, clean.descricao]]);
     sheet.getRange(current._row, 9, 1, 2).setValues([[who.email, nowStamp_()]]);
 
     appendAudit_('editar', id, antes + ' => ' + resumoLancamento_(clean));

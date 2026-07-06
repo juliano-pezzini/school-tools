@@ -472,6 +472,88 @@ function reopenDecision_(periodo, status) {
   return { changed: false, jaAberto: true, status: 'aberto' };
 }
 
+// ===========================================================================
+// Client pre-validation (pure — mirrors server guards for optimistic UI)
+// ===========================================================================
+
+/**
+ * Client-side pre-validation that mirrors the server guards executed before
+ * writing a lançamento. Pure: no DOM, no I/O, no clock — everything comes in
+ * via `params`. Returns the first error message (pt-BR) or `''` if valid.
+ *
+ * @param {Object} params
+ * @param {string} params.dateISO       – 'yyyy-MM-dd' from the date input (may be '')
+ * @param {string} params.todayISO      – 'yyyy-MM-dd' of "today" in America/Sao_Paulo
+ * @param {string[]} params.closedPeriods – array of 'YYYY-MM' keys of closed months
+ * @param {*}      params.valor         – raw value string from the input (e.g. '200,00')
+ * @param {string} params.categoria     – category text
+ * @param {string} params.descricao     – description text
+ * @param {boolean} [params.isEdit]     – true when editing an existing lançamento
+ * @param {string} [params.originDateISO] – 'yyyy-MM-dd' of the original lançamento (edit only)
+ */
+function validateLancamentoClient_(params) {
+  params = params || {};
+  // 1) Data preenchida
+  if (!params.dateISO) return 'Informe uma data.';
+  // 2) Data não-futura
+  if (params.dateISO > params.todayISO) return 'Não é possível lançar com data futura.';
+  // 3) Período destino não fechado
+  var periodo = params.dateISO.substring(0, 7);
+  var closed = params.closedPeriods || [];
+  for (var i = 0; i < closed.length; i++) {
+    if (closed[i] === periodo) {
+      var lbl = periodo.split('-');
+      return 'O período ' + lbl[1] + '/' + lbl[0] + ' está fechado. Reabra-o para alterar.';
+    }
+  }
+  // 3b) Edição: período de origem também deve estar aberto
+  if (params.isEdit && params.originDateISO) {
+    var origPeriodo = params.originDateISO.substring(0, 7);
+    for (var j = 0; j < closed.length; j++) {
+      if (closed[j] === origPeriodo) {
+        var ol = origPeriodo.split('-');
+        return 'O período ' + ol[1] + '/' + ol[0] + ' está fechado. Reabra-o para alterar.';
+      }
+    }
+  }
+  // 4) Valor > 0, numérico, ≤ 2 casas decimais (mirrors parseMoney_)
+  var valStr = String(params.valor == null ? '' : params.valor).trim();
+  if (valStr === '') return 'Informe um valor maior que zero, com até dois centavos.';
+  var normStr = valStr;
+  if (normStr.indexOf(',') !== -1) {
+    normStr = normStr.replace(/\./g, '').replace(',', '.');
+  } else if ((normStr.split('.').length - 1) > 1) {
+    normStr = normStr.replace(/\./g, '');
+  }
+  var n = Number(normStr);
+  if (!isFinite(n) || n <= 0) return 'Informe um valor maior que zero, com até dois centavos.';
+  var dotIdx = normStr.indexOf('.');
+  if (dotIdx !== -1 && normStr.length - dotIdx - 1 > 2) {
+    return 'Informe um valor maior que zero, com até dois centavos.';
+  }
+  // 5) Limites de campo
+  if ((params.categoria || '').length > CATEGORIA_MAX) return 'Categoria muito longa (máximo de 60 caracteres).';
+  if ((params.descricao || '').length > DESCRICAO_MAX) return 'Descrição muito longa (máximo de 280 caracteres).';
+  return '';
+}
+
+/**
+ * Pre-check for deletion: returns error message if the lançamento's period is
+ * closed, or '' if ok.
+ */
+function validateDeleteClient_(dateISO, closedPeriods) {
+  if (!dateISO) return '';
+  var periodo = dateISO.substring(0, 7);
+  var closed = closedPeriods || [];
+  for (var i = 0; i < closed.length; i++) {
+    if (closed[i] === periodo) {
+      var lbl = periodo.split('-');
+      return 'O período ' + lbl[1] + '/' + lbl[0] + ' está fechado. Reabra-o para alterar.';
+    }
+  }
+  return '';
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     formatBRL_: formatBRL_,
@@ -491,6 +573,8 @@ if (typeof module !== 'undefined' && module.exports) {
     listForView_: listForView_,
     dedupDecision_: dedupDecision_,
     closeDecision_: closeDecision_,
-    reopenDecision_: reopenDecision_
+    reopenDecision_: reopenDecision_,
+    validateLancamentoClient_: validateLancamentoClient_,
+    validateDeleteClient_: validateDeleteClient_
   };
 }
