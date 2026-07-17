@@ -405,7 +405,7 @@ function getComprovanteFolder_() {
 function uploadComprovante_(lancamentoId, file) {
   var v = validateComprovante_(file, {});
   var mime = v.mimeType;
-  var bytes = Utilities.base64Decode(String(file.dataBase64 || ''));
+  var bytes = Utilities.base64Decode(String(file.bytesBase64 || ''));
   var nome = comprovanteFileName_(lancamentoId, mime, Date.now());
   var blob = Utilities.newBlob(bytes, mime, nome);
 
@@ -563,6 +563,66 @@ function deleteLancamento(id) {
       .setValues([[true, who.email, nowStamp_()]]);
 
     appendAudit_('excluir', id, resumoRow_(current));
+    return { ok: true };
+  });
+}
+
+// ===========================================================================
+// Comprovantes service — anexar/substituir/remover (auditados)
+// ===========================================================================
+
+/**
+ * Anexa ou SUBSTITUI o comprovante de um lançamento (COMP-01/03). Barreiras:
+ * autorização → (lock) → localizar linha viva → período aberto → validação de
+ * arquivo (lógica pura) → upload ao Drive (link público) → se já havia arquivo,
+ * manda o antigo para a lixeira → grava ComprovanteId/Url (cols 15-16) →
+ * auditoria(`anexar`|`substituir`). Tudo sob o lock serializa reenvios (COMP-09),
+ * então a substituição troca a referência sem deixar arquivo órfão.
+ */
+function setComprovante(lancamentoId, file) {
+  var who = requireRole_(['admin', 'tesoureiro']);
+  return withLock_(function () {
+    var rows = readLancamentoRows_();
+    var current = findLancamentoById_(rows, lancamentoId);
+    if (!current) throw new Error('Lançamento não encontrado.');
+
+    assertPeriodOpen_(current.Data, closedPeriods_());
+
+    var antigo = current.ComprovanteId;
+    var up = uploadComprovante_(current.Id, file); // valida + sobe (lança se inválido)
+    if (antigo) trashComprovante_(antigo);
+
+    getSheet_(SH_LANC).getRange(current._row, 15, 1, 2)
+      .setValues([[up.fileId, up.url]]);
+
+    appendAudit_(antigo ? 'substituir' : 'anexar', current.Id,
+      resumoRow_(current) + ' | arquivo=' + up.fileId);
+    return { ok: true, id: up.fileId, url: up.url };
+  });
+}
+
+/**
+ * Remove o comprovante SEM apagar o lançamento (COMP-04): manda o arquivo para
+ * a lixeira e limpa ComprovanteId/Url. No-op tolerante se não houver comprovante.
+ * Barreiras: autorização → (lock) → localizar linha → período aberto.
+ */
+function removeComprovante(lancamentoId) {
+  var who = requireRole_(['admin', 'tesoureiro']);
+  return withLock_(function () {
+    var rows = readLancamentoRows_();
+    var current = findLancamentoById_(rows, lancamentoId);
+    if (!current) throw new Error('Lançamento não encontrado.');
+
+    assertPeriodOpen_(current.Data, closedPeriods_());
+
+    if (!current.ComprovanteId) return { ok: true, semComprovante: true };
+
+    var antigo = current.ComprovanteId;
+    trashComprovante_(antigo);
+    getSheet_(SH_LANC).getRange(current._row, 15, 1, 2).setValues([['', '']]);
+
+    appendAudit_('remover_comprovante', current.Id,
+      resumoRow_(current) + ' | arquivo=' + antigo);
     return { ok: true };
   });
 }
