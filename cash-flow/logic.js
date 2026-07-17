@@ -684,6 +684,333 @@ function reportPdfFileName_(tipo, periodo) {
   return 'Relatorio_APP_' + tipo + '_' + periodo + '.pdf';
 }
 
+// ===========================================================================
+// Relatórios — agregação + builders (T2)
+// ===========================================================================
+
+var MONTH_NAMES_REL = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun',
+  'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+/**
+ * Relatório mensal completo (puro).
+ * `config` = `{ saldoAbertura }` ou `null`; `allRows` = array de objetos
+ * de lançamento; `mes` = `'YYYY-MM'`; `closedPeriods` = array de `'YYYY-MM'`.
+ */
+function computeMonthReport_(config, allRows, mes, closedPeriods) {
+  mes = String(mes);
+  var parts = mes.split('-');
+  var ano = Number(parts[0]);
+  var mesNum = Number(parts[1]);
+
+  var state = computeMonthState_(config, allRows, mes);
+  var lancamentos = listForView_(allRows, { mes: mes });
+
+  var provisorio = true;
+  var closed = closedPeriods || [];
+  for (var i = 0; i < closed.length; i++) {
+    if (closed[i] === mes) { provisorio = false; break; }
+  }
+
+  return {
+    mes: mes,
+    ano: ano,
+    mesFmt: pad2_(mesNum) + '/' + ano,
+    entradasMes: state.totalEntradas,
+    saidasMes: state.totalSaidas,
+    saldoMes: round2_(state.totalEntradas - state.totalSaidas),
+    saldoAcumulado: state.saldoFinal,
+    provisorio: provisorio,
+    lancamentos: lancamentos.map(function (r) {
+      var d = r.Data;
+      var dataFmt = (d instanceof Date && !isNaN(d.getTime())) ? formatDate_(d) : '';
+      return {
+        Id: r.Id,
+        Data: dataFmt,
+        Tipo: r.Tipo,
+        Categoria: r.Categoria,
+        Valor: r.Valor,
+        Descricao: r.Descricao,
+        ComprovanteUrl: r.ComprovanteUrl || '',
+        TemComprovante: !!(r.ComprovanteId && r.ComprovanteUrl)
+      };
+    })
+  };
+}
+
+/**
+ * Relatório anual completo (puro). Itera todos os 12 meses do ano, computa
+ * séries mensais, quebra por categoria (normalizada), insights e flag
+ * provisório por mês.
+ */
+function computeAnnualReport_(config, allRows, ano, closedPeriods) {
+  ano = Number(ano);
+  allRows = allRows || [];
+  closedPeriods = closedPeriods || [];
+
+  var abertura = 0;
+  if (config != null && config.saldoAbertura != null && isFinite(Number(config.saldoAbertura))) {
+    abertura = Number(config.saldoAbertura);
+  }
+
+  var meses = [];
+  var totalEntradas = 0, totalSaidas = 0;
+  var catEntrada = {}, catSaida = {};
+
+  for (var m = 1; m <= 12; m++) {
+    var mesKey = ano + '-' + pad2_(m);
+    var state = computeMonthState_(config, allRows, mesKey);
+
+    var provisorio = true;
+    for (var ci = 0; ci < closedPeriods.length; ci++) {
+      if (closedPeriods[ci] === mesKey) { provisorio = false; break; }
+    }
+
+    meses.push({
+      mesKey: mesKey,
+      mesFmt: pad2_(m) + '/' + ano,
+      entradas: state.totalEntradas,
+      saidas: state.totalSaidas,
+      saldo: round2_(state.totalEntradas - state.totalSaidas),
+      acumulado: state.saldoFinal,
+      provisorio: provisorio
+    });
+
+    totalEntradas = round2_(totalEntradas + state.totalEntradas);
+    totalSaidas = round2_(totalSaidas + state.totalSaidas);
+  }
+
+  // Categorias (normalizada → soma; primeira grafia)
+  for (var ri = 0; ri < allRows.length; ri++) {
+    var row = allRows[ri];
+    if (!row || row.Excluido === true) continue;
+    var rp = periodKey_(row.Data);
+    if (rp.substring(0, 4) !== String(ano)) continue;
+    var val = Number(row.Valor);
+    if (!isFinite(val)) continue;
+    var catRaw = String(row.Categoria == null ? '' : row.Categoria).trim();
+    var catKey = normalizeCategoryKey_(catRaw);
+    if (!catKey) continue;
+    if (row.Tipo === 'entrada') {
+      if (!catEntrada[catKey]) catEntrada[catKey] = { categoria: catRaw, total: 0 };
+      catEntrada[catKey].total = round2_(catEntrada[catKey].total + val);
+    } else if (row.Tipo === 'saida') {
+      if (!catSaida[catKey]) catSaida[catKey] = { categoria: catRaw, total: 0 };
+      catSaida[catKey].total = round2_(catSaida[catKey].total + val);
+    }
+  }
+
+  function catList(map) {
+    return Object.keys(map)
+      .map(function (k) { return map[k]; })
+      .sort(function (a, b) { return b.total - a.total; });
+  }
+
+  var porCategoriaEntrada = catList(catEntrada);
+  var porCategoriaSaida = catList(catSaida);
+  var resultado = round2_(totalEntradas - totalSaidas);
+  var saldoAcumulado = meses.length > 0 ? meses[11].acumulado : round2_(abertura);
+
+  return {
+    ano: ano,
+    totalEntradas: totalEntradas,
+    totalSaidas: totalSaidas,
+    resultado: resultado,
+    saldoAcumulado: saldoAcumulado,
+    meses: meses,
+    porCategoriaEntrada: porCategoriaEntrada,
+    porCategoriaSaida: porCategoriaSaida,
+    insights: buildInsights_(ano, meses, porCategoriaEntrada, porCategoriaSaida, totalEntradas, totalSaidas)
+  };
+}
+
+/** Gera frases de insight em pt-BR a partir das séries mensais agregadas. */
+function buildInsights_(ano, meses, catEntrada, catSaida, totalEntradas, totalSaidas) {
+  var insights = [];
+  if (!meses || !meses.length) return insights;
+
+  var maxIdx = 0, minIdx = 0;
+  for (var i = 1; i < meses.length; i++) {
+    if (meses[i].saldo > meses[maxIdx].saldo) maxIdx = i;
+    if (meses[i].saldo < meses[minIdx].saldo) minIdx = i;
+  }
+  insights.push('Melhor mês: ' + MONTH_NAMES_REL[maxIdx] + ' (saldo ' + formatBRL_(meses[maxIdx].saldo) + ').');
+  insights.push('Mês mais apertado: ' + MONTH_NAMES_REL[minIdx] + ' (saldo ' + formatBRL_(meses[minIdx].saldo) + ').');
+
+  var redMonths = [];
+  for (var j = 0; j < meses.length; j++) {
+    if (meses[j].saldo < 0) redMonths.push(MONTH_NAMES_REL[j]);
+  }
+  if (redMonths.length) {
+    insights.push(redMonths.length + ' mês(es) fechou(aram) no vermelho: ' + redMonths.join(', ') + '.');
+  } else {
+    insights.push('Nenhum mês fechou no vermelho — saldo mensal sempre positivo.');
+  }
+
+  if (catSaida.length) {
+    var top = catSaida[0];
+    insights.push('Maior despesa do ano: ' + top.categoria + ' (' + formatBRL_(top.total)
+      + ', ' + pct_(top.total, totalSaidas) + ' das saídas).');
+  }
+  if (catEntrada.length) {
+    var topE = catEntrada[0];
+    insights.push('Maior fonte de receita: ' + topE.categoria + ' (' + formatBRL_(topE.total)
+      + ', ' + pct_(topE.total, totalEntradas) + ' das entradas).');
+  }
+
+  insights.push('Média de saídas por mês: ' + formatBRL_(totalSaidas / 12) + '.');
+
+  var res = round2_(totalEntradas - totalSaidas);
+  insights.push('Resultado de ' + ano + ': ' + (res >= 0 ? 'superávit' : 'déficit')
+    + ' de ' + formatBRL_(Math.abs(res)) + '.');
+
+  return insights;
+}
+
+/** Gera um gráfico de barras de saldo mensal em SVG puro. */
+function buildSvgBars_(meses) {
+  var w = 720, h = 200, pad = 28, n = 12;
+  var maxAbs = 1;
+  for (var i = 0; i < n && i < meses.length; i++) {
+    maxAbs = Math.max(maxAbs, Math.abs(meses[i].saldo));
+  }
+  var midY = h / 2;
+  var slot = (w - pad * 2) / n;
+  var barW = slot * 0.6;
+  var svg = '<svg width="100%" viewBox="0 0 ' + w + ' ' + h + '" xmlns="http://www.w3.org/2000/svg">';
+  svg += '<line x1="' + pad + '" y1="' + midY + '" x2="' + (w - pad) + '" y2="' + midY + '" stroke="#999" stroke-width="1"/>';
+  for (var j = 0; j < n && j < meses.length; j++) {
+    var val = meses[j].saldo;
+    var barH = Math.abs(val) / maxAbs * (h / 2 - pad);
+    var x = pad + slot * j + (slot - barW) / 2;
+    var y = val >= 0 ? midY - barH : midY;
+    var color = val >= 0 ? '#137333' : '#c5221f';
+    svg += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) +
+      '" height="' + barH.toFixed(1) + '" fill="' + color + '"/>';
+    svg += '<text x="' + (x + barW / 2).toFixed(1) + '" y="' + (h - 8) +
+      '" font-size="10" text-anchor="middle" fill="#555">' + MONTH_NAMES_REL[j] + '</text>';
+  }
+  svg += '</svg>';
+  return svg;
+}
+
+/** Monta o HTML do PDF mensal (KPIs + tabela de lançamentos + comprovantes + privacy note). */
+function buildMonthlyPdfHtml_(report, generatedStamp) {
+  var badge = report.provisorio ? '<span style="color:#e65100">⚠ Provisório</span>' : '<span style="color:#137333">✔ Oficial (fechado)</span>';
+
+  var rowsHtml = '';
+  var lancs = report.lancamentos || [];
+  for (var i = 0; i < lancs.length; i++) {
+    var l = lancs[i];
+    var compLink = l.TemComprovante
+      ? '<a href="' + escapeHtml_(l.ComprovanteUrl) + '">ver</a>'
+      : '—';
+    rowsHtml += '<tr>'
+      + '<td>' + escapeHtml_(l.Data) + '</td>'
+      + '<td>' + escapeHtml_(l.Tipo) + '</td>'
+      + '<td>' + escapeHtml_(l.Categoria) + '</td>'
+      + '<td>' + escapeHtml_(l.Descricao) + '</td>'
+      + '<td class="num">' + formatBRL_(l.Valor) + '</td>'
+      + '<td>' + compLink + '</td>'
+      + '</tr>';
+  }
+
+  return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><style>'
+    + 'body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:12px;margin:24px;}'
+    + 'h1{font-size:20px;margin:0 0 2px;}h2{font-size:14px;margin:20px 0 8px;border-bottom:2px solid #1565c0;padding-bottom:4px;color:#0d47a1;}'
+    + '.sub{color:#666;margin:0 0 16px;}'
+    + '.kpis{width:100%;border-collapse:collapse;margin-bottom:8px;}'
+    + '.kpis td{width:25%;background:#f4f6f8;border:1px solid #e0e0e0;padding:10px;text-align:center;}'
+    + '.kpis .k{font-size:11px;color:#666;text-transform:uppercase;}'
+    + '.kpis .v{font-size:17px;font-weight:bold;}'
+    + 'table.data{width:100%;border-collapse:collapse;margin-bottom:8px;}'
+    + 'table.data th,table.data td{border:1px solid #ddd;padding:5px 8px;}'
+    + 'table.data th{background:#1565c0;color:#fff;text-align:left;font-size:11px;}'
+    + '.num{text-align:right;font-variant-numeric:tabular-nums;}'
+    + '.neg{color:#c5221f;}'
+    + '.privacy{font-size:10px;color:#999;margin-top:4px;}'
+    + '</style></head><body>'
+    + '<h1>Prestação de Contas — APP</h1>'
+    + '<p class="sub">Relatório Mensal · ' + escapeHtml_(report.mesFmt) + ' · ' + badge
+    + ' · Emitido em ' + escapeHtml_(generatedStamp) + '</p>'
+    + '<table class="kpis"><tr>'
+    + '<td><div class="k">Entradas</div><div class="v">' + formatBRL_(report.entradasMes) + '</div></td>'
+    + '<td><div class="k">Saídas</div><div class="v">' + formatBRL_(report.saidasMes) + '</div></td>'
+    + '<td><div class="k">Saldo do Mês</div><div class="v ' + (report.saldoMes < 0 ? 'neg' : '') + '">' + formatBRL_(report.saldoMes) + '</div></td>'
+    + '<td><div class="k">Acumulado</div><div class="v ' + (report.saldoAcumulado < 0 ? 'neg' : '') + '">' + formatBRL_(report.saldoAcumulado) + '</div></td>'
+    + '</tr></table>'
+    + '<h2>Lançamentos</h2>'
+    + '<table class="data"><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Descrição</th><th>Valor</th><th>Comprovante</th></tr>'
+    + rowsHtml
+    + '</table>'
+    + '<p class="privacy">Os links de comprovante são públicos. Evite anexar documentos com dados pessoais sensíveis.</p>'
+    + '</body></html>';
+}
+
+/** Monta o HTML do PDF anual (KPIs + tabela mensal + categorias + SVG + insights). */
+function buildAnnualPdfHtml_(report, generatedStamp) {
+  var bars = buildSvgBars_(report.meses);
+
+  function catRows(list) {
+    return list.map(function (c) {
+      return '<tr><td>' + escapeHtml_(c.categoria) + '</td><td class="num">' + formatBRL_(c.total) + '</td></tr>';
+    }).join('');
+  }
+
+  var monthRows = '';
+  for (var i = 0; i < report.meses.length; i++) {
+    var m = report.meses[i];
+    monthRows += '<tr>'
+      + '<td>' + MONTH_NAMES_REL[i] + '</td>'
+      + '<td class="num">' + formatBRL_(m.entradas) + '</td>'
+      + '<td class="num">' + formatBRL_(m.saidas) + '</td>'
+      + '<td class="num ' + (m.saldo < 0 ? 'neg' : '') + '">' + formatBRL_(m.saldo) + '</td>'
+      + '<td class="num ' + (m.acumulado < 0 ? 'neg' : '') + '">' + formatBRL_(m.acumulado) + '</td>'
+      + '</tr>';
+  }
+
+  var insightItems = (report.insights || []).map(function (s) {
+    return '<li>' + escapeHtml_(s) + '</li>';
+  }).join('');
+
+  return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><style>'
+    + 'body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:12px;margin:24px;}'
+    + 'h1{font-size:20px;margin:0 0 2px;}h2{font-size:14px;margin:20px 0 8px;border-bottom:2px solid #1565c0;padding-bottom:4px;color:#0d47a1;}'
+    + '.sub{color:#666;margin:0 0 16px;}'
+    + '.kpis{width:100%;border-collapse:collapse;margin-bottom:8px;}'
+    + '.kpis td{width:33%;background:#f4f6f8;border:1px solid #e0e0e0;padding:10px;text-align:center;}'
+    + '.kpis .k{font-size:11px;color:#666;text-transform:uppercase;}'
+    + '.kpis .v{font-size:17px;font-weight:bold;}'
+    + 'table.data{width:100%;border-collapse:collapse;margin-bottom:8px;}'
+    + 'table.data th,table.data td{border:1px solid #ddd;padding:5px 8px;}'
+    + 'table.data th{background:#1565c0;color:#fff;text-align:left;font-size:11px;}'
+    + '.num{text-align:right;font-variant-numeric:tabular-nums;}'
+    + '.neg{color:#c5221f;}'
+    + '.cols{width:100%;}.cols td{vertical-align:top;width:50%;}'
+    + 'ul{margin:6px 0 0 18px;}li{margin-bottom:4px;}'
+    + '</style></head><body>'
+    + '<h1>Prestação de Contas — APP</h1>'
+    + '<p class="sub">Associação de Pais e Mestres · Exercício ' + report.ano
+    + ' · Emitido em ' + escapeHtml_(generatedStamp) + '</p>'
+    + '<table class="kpis"><tr>'
+    + '<td><div class="k">Entradas</div><div class="v">' + formatBRL_(report.totalEntradas) + '</div></td>'
+    + '<td><div class="k">Saídas</div><div class="v">' + formatBRL_(report.totalSaidas) + '</div></td>'
+    + '<td><div class="k">Resultado</div><div class="v ' + (report.resultado < 0 ? 'neg' : '') + '">'
+    + formatBRL_(report.resultado) + '</div></td>'
+    + '</tr></table>'
+    + '<h2>Saldo por mês</h2>' + bars
+    + '<h2>Movimento mensal</h2>'
+    + '<table class="data"><tr><th>Mês</th><th>Entradas</th><th>Saídas</th><th>Saldo</th><th>Acumulado</th></tr>'
+    + monthRows + '</table>'
+    + '<h2>Por categoria</h2>'
+    + '<table class="cols"><tr><td>'
+    + '<table class="data"><tr><th>Receita</th><th>Total</th></tr>' + catRows(report.porCategoriaEntrada) + '</table>'
+    + '</td><td>'
+    + '<table class="data"><tr><th>Despesa</th><th>Total</th></tr>' + catRows(report.porCategoriaSaida) + '</table>'
+    + '</td></tr></table>'
+    + '<h2>Destaques do ano</h2><ul>' + insightItems + '</ul>'
+    + '</body></html>';
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     formatBRL_: formatBRL_,
@@ -714,6 +1041,13 @@ if (typeof module !== 'undefined' && module.exports) {
     escapeHtml_: escapeHtml_,
     toSortedPairs_: toSortedPairs_,
     pct_: pct_,
-    reportPdfFileName_: reportPdfFileName_
+    reportPdfFileName_: reportPdfFileName_,
+    computeMonthReport_: computeMonthReport_,
+    computeAnnualReport_: computeAnnualReport_,
+    buildInsights_: buildInsights_,
+    buildSvgBars_: buildSvgBars_,
+    buildMonthlyPdfHtml_: buildMonthlyPdfHtml_,
+    buildAnnualPdfHtml_: buildAnnualPdfHtml_,
+    MONTH_NAMES_REL: MONTH_NAMES_REL
   };
 }
