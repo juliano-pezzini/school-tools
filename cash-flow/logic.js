@@ -554,6 +554,101 @@ function validateDeleteClient_(dateISO, closedPeriods) {
   return '';
 }
 
+// ===========================================================================
+// T1 (Comprovantes) — validação de arquivo e nome (lógica pura)
+// ===========================================================================
+//
+// Parte decidível da feature Comprovantes: whitelist de tipo, teto de tamanho e
+// nome determinístico do arquivo. A cola de Drive/Sheets (upload/lixeira) fica
+// em Code.gs. Mensagens pt-BR aqui são a fonte única, espelhadas na UI.
+
+/** Teto de tamanho do comprovante: 10 MB. */
+var COMPROVANTE_MAX_BYTES = 10 * 1024 * 1024;
+
+/** Tipos MIME aceitos para comprovante (foto de celular + PDF). */
+var COMPROVANTE_TIPOS = [
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf'
+];
+
+/** MIME → extensão de arquivo. Desconhecido → `bin` (não deveria ocorrer após validar). */
+function extForMime_(mimeType) {
+  switch (String(mimeType || '').toLowerCase()) {
+    case 'image/jpeg': return 'jpg';
+    case 'image/png': return 'png';
+    case 'image/webp': return 'webp';
+    case 'image/heic': return 'heic';
+    case 'image/heif': return 'heif';
+    case 'application/pdf': return 'pdf';
+    default: return 'bin';
+  }
+}
+
+/** Extensão do nome do arquivo (minúscula, sem ponto); `''` se não houver. */
+function fileExt_(name) {
+  var s = String(name == null ? '' : name);
+  var dot = s.lastIndexOf('.');
+  if (dot < 0 || dot === s.length - 1) return '';
+  return s.substring(dot + 1).toLowerCase();
+}
+
+/** Extensão → MIME (fallback quando o MIME reportado vem vazio/impreciso). */
+function mimeForExt_(ext) {
+  switch (String(ext || '').toLowerCase()) {
+    case 'jpg': case 'jpeg': return 'image/jpeg';
+    case 'png': return 'image/png';
+    case 'webp': return 'image/webp';
+    case 'heic': return 'image/heic';
+    case 'heif': return 'image/heif';
+    case 'pdf': return 'application/pdf';
+    default: return '';
+  }
+}
+
+/** Nome determinístico do arquivo no Drive: `<lancamentoId>_<timestampMs>.<ext>`. */
+function comprovanteFileName_(lancamentoId, mimeType, timestampMs) {
+  return String(lancamentoId) + '_' + String(timestampMs) + '.' + extForMime_(mimeType);
+}
+
+/**
+ * Valida um comprovante na fronteira (COMP-05): tipo na whitelist e tamanho
+ * dentro do teto. Se o MIME reportado vier vazio ou fora da whitelist, tenta
+ * inferir pelo tipo da extensão do nome; só rejeita se a extensão também não
+ * casar. Retorna `{ ok, mimeType }` com o MIME resolvido (para o blob correto)
+ * ou lança `Error` com mensagem pt-BR.
+ */
+function validateComprovante_(file, opts) {
+  opts = opts || {};
+  var allowed = opts.allowedTypes || COMPROVANTE_TIPOS;
+  var maxBytes = opts.maxBytes || COMPROVANTE_MAX_BYTES;
+
+  if (!file || String(file.name == null ? '' : file.name).trim() === '') {
+    throw new Error('Selecione um arquivo de comprovante.');
+  }
+
+  var reported = String(file.mimeType || '').toLowerCase();
+  var resolved = '';
+  if (reported && allowed.indexOf(reported) >= 0) {
+    resolved = reported;
+  } else {
+    var inferred = mimeForExt_(fileExt_(file.name));
+    if (inferred && allowed.indexOf(inferred) >= 0) resolved = inferred;
+  }
+  if (!resolved) {
+    throw new Error('Tipo de arquivo não permitido. Use imagem (JPG, PNG, WEBP, HEIC) ou PDF.');
+  }
+
+  var size = Number(file.size);
+  if (!(size > 0)) {
+    throw new Error('O arquivo do comprovante está vazio.');
+  }
+  if (size > maxBytes) {
+    var mb = Math.round(maxBytes / (1024 * 1024));
+    throw new Error('O comprovante excede o limite de ' + mb + ' MB.');
+  }
+
+  return { ok: true, mimeType: resolved };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     formatBRL_: formatBRL_,
@@ -575,6 +670,11 @@ if (typeof module !== 'undefined' && module.exports) {
     closeDecision_: closeDecision_,
     reopenDecision_: reopenDecision_,
     validateLancamentoClient_: validateLancamentoClient_,
-    validateDeleteClient_: validateDeleteClient_
+    validateDeleteClient_: validateDeleteClient_,
+    validateComprovante_: validateComprovante_,
+    comprovanteFileName_: comprovanteFileName_,
+    extForMime_: extForMime_,
+    COMPROVANTE_TIPOS: COMPROVANTE_TIPOS,
+    COMPROVANTE_MAX_BYTES: COMPROVANTE_MAX_BYTES
   };
 }
