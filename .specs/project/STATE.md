@@ -1,11 +1,18 @@
 # State
 
-**Last Updated:** 2026-06-26
-**Current Work:** **M1 — feature Lançamentos & Saldo**: spec v2 oficializada (AD-010) + design v2 + **tasks.md** prontos (`.specs/features/lancamentos-saldo/`). Plano: 16 tarefas em 4 fases (Foundation → lógica pura `cash-flow/logic.js` com Vitest → cola Apps Script `Code.gs` → UI). Estrutura: lógica pura testável em Node (`logic.js`) + cola Apps Script (Sheets/Lock/Session/Cache) em `Code.gs`; 5 abas (Lancamentos/Config/Fechamentos/Usuarios/Auditoria); soft-delete + auditoria append-only + idempotência por clientToken. Próximo: **Execute** (4 fases → oferecer 1 worker por fase; aguardando aprovação das tasks + escolha Vitest/Jest). Em paralelo, B-002 (Robô da Biblioteca/MSTECH) aguarda infos da bibliotecária. M0 técnico fechado para a stack A.
+**Last Updated:** 2026-07-16
+**Current Work:** **M1 — feature Comprovantes**: ✅ **implementada e verificada** (PASS; `.specs/features/comprovantes/validation.md`). Anexo de **um** comprovante (foto/galeria/PDF) por lançamento, no Drive com **link público** (B-006), referenciado por 2 colunas novas em `Lancamentos` (`ComprovanteId`/`ComprovanteUrl`); opcional; anexar/substituir/remover só em mês aberto; soft-delete do lançamento manda o arquivo à lixeira. 5 tarefas em 3 fases (lógica pura `logic.js`+Vitest → cola Drive/Sheets `Code.gs` → UI), 6 commits atômicos; suite **123 testes** (16 novos em `comprovante.test.js`). **Pendente:** deploy smoke manual (passos 11–14 no cabeçalho de `cash-flow/Index.html`). Feature **Lançamentos & Saldo** concluída e verificada (PASS, 74 testes). Em paralelo, B-002 (Robô da Biblioteca/MSTECH) aguarda infos da bibliotecária. M0 técnico fechado para a stack A.
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-011: Comprovantes expostos por link público do Drive (2026-07-16)
+
+**Decision:** Os arquivos de comprovante (foto/PDF por lançamento) são gravados no Drive com permissão **"qualquer pessoa com o link pode ver"** (`ANYONE_WITH_LINK, VIEW`), para poderem aparecer nos **relatórios públicos** dos pais (B-006). Um comprovante por lançamento, referenciado por `ComprovanteId`/`ComprovanteUrl` na aba `Lancamentos`.
+**Reason:** O usuário confirmou que os pais (sem conta do domínio) precisam **ver o comprovante** na prestação de contas. Reusa o precedente do spike `m0-reports` (PDF público por link).
+**Trade-off:** Comprovante acessível por link sem login → o tesoureiro deve evitar anexar documentos com dados pessoais sensíveis. A UI exibe aviso discreto de privacidade.
+**Impact:** **Exceção consciente e escopada a AD-005** ("evitar link público") — AD-005 segue ativo para os demais arquivos; comprovantes e relatórios públicos são a exceção justificada por B-006. Guia a feature Comprovantes (`uploadComprovante_` + `setSharing`).
 
 ### AD-010: Lançamentos & Saldo — spec v2 oficializada (segunda leitura) (2026-06-26)
 
