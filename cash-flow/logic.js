@@ -649,6 +649,41 @@ function validateComprovante_(file, opts) {
   return { ok: true, mimeType: resolved };
 }
 
+// ===========================================================================
+// Relatórios — helpers puros (T1)
+// ===========================================================================
+
+/** Escapa caracteres perigosos para embedding em HTML (PDF/tela). */
+function escapeHtml_(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** Pares `{key, value}` de um objeto, ordenados por `value` decrescente. */
+function toSortedPairs_(obj) {
+  return Object.keys(obj)
+    .map(function (k) { return { key: k, value: obj[k] }; })
+    .sort(function (a, b) { return b.value - a.value; });
+}
+
+/** Percentual inteiro como string (ex.: `'25%'`). `0%` se `whole` é zero. */
+function pct_(part, whole) {
+  if (!whole) return '0%';
+  return Math.round(part / whole * 100) + '%';
+}
+
+/**
+ * Nome determinístico do PDF de relatório no Drive.
+ * `tipo` = `'mensal'` | `'anual'`; `periodo` = `'2025-07'` | `'2025'`.
+ */
+function reportPdfFileName_(tipo, periodo) {
+  return 'Relatorio_APP_' + tipo + '_' + periodo + '.pdf';
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     formatBRL_: formatBRL_,
@@ -675,6 +710,10 @@ if (typeof module !== 'undefined' && module.exports) {
     comprovanteFileName_: comprovanteFileName_,
     extForMime_: extForMime_,
     COMPROVANTE_TIPOS: COMPROVANTE_TIPOS,
-    COMPROVANTE_MAX_BYTES: COMPROVANTE_MAX_BYTES
+    COMPROVANTE_MAX_BYTES: COMPROVANTE_MAX_BYTES,
+    escapeHtml_: escapeHtml_,
+    toSortedPairs_: toSortedPairs_,
+    pct_: pct_,
+    reportPdfFileName_: reportPdfFileName_
   };
 }
