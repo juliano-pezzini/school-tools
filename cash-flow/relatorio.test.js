@@ -234,6 +234,13 @@ describe('computeAnnualReport_', () => {
     expect(r.totalEntradas).toBe(3000);
   });
 
+  it('porCategoriaEntrada exclui lançamentos com Excluido=true', () => {
+    var r = computeAnnualReport_(config, rows, 2025, []);
+    // L6 (Contribuição, 500, excluída) não deve aparecer na soma de categorias
+    var contrib = r.porCategoriaEntrada.find(function (c) { return c.categoria === 'Contribuição'; });
+    expect(contrib.total).toBe(1000); // só L1; L6 excluída
+  });
+
   it('gera insights (REL-08)', () => {
     var r = computeAnnualReport_(config, rows, 2025, []);
     expect(r.insights.length).toBeGreaterThan(0);
