@@ -48,6 +48,20 @@
       lixeira e as colunas 15/16 ficam vazias; Auditoria (excluir | comprovante removido).
   14. Anexar/trocar/remover em MÊS FECHADO é bloqueado ("período MM/AAAA fechado");
       reabrir o mês volta a permitir.
+  ---- Relatórios (M1) ----
+  15. Seção "Relatórios": selecionar mês com dados → "Ver relatório" → KPIs (entradas,
+      saídas, saldo, acumulado), badge provisório/oficial, tabela de lançamentos com
+      "ver" (comprovante) ou "—", aviso de privacidade. Mês vazio → "Sem lançamentos".
+  16. Selecionar "Anual" e um ano com dados → KPIs anuais, 3 gráficos Chart.js
+      (barras entradas×saídas, linha acumulado, rosca categorias), tabela "Por
+      categoria" e "Destaques do ano" (insights). Σ mensal == anual.
+  17. "Gerar PDF" (mensal) → link retornado abre sem login (aba anônima); PDF contém
+      links de comprovante e aviso de privacidade. Regerar o mesmo mês → link antigo
+      não abre mais, novo abre. Conferir `Auditoria` (ação=gerar_relatorio).
+  18. "Gerar PDF" (anual) → PDF com KPIs, tabela mensal, categorias, SVG de barras
+      e insights. Link público abre sem login.
+  19. Chamar `getMonthlyReport`/`getAnnualReport`/`exportReportPdf` sem papel
+      admin/tesoureiro → "Acesso negado".
   ===========================================================================
 -->
 <html lang="pt-BR">
@@ -223,6 +237,7 @@
       }
       @keyframes gs-spin { to { transform: rotate(360deg); } }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   </head>
   <body>
     <div id="globalStatus" class="global-status" role="status" aria-live="polite">
@@ -329,6 +344,63 @@
         <tbody></tbody>
       </table>
       <input id="rowComprovante" type="file" accept="image/*,application/pdf" capture="environment" style="display:none" onchange="onRowComprovanteChosen()" />
+    </div>
+
+    <!-- ===== Relatórios ===== -->
+    <div class="card">
+      <h2>Relatórios</h2>
+      <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap;">
+        <div>
+          <label for="relTipo">Tipo</label>
+          <select id="relTipo" onchange="onRelTipoChange()">
+            <option value="mensal">Mensal</option>
+            <option value="anual">Anual</option>
+          </select>
+        </div>
+        <div id="relMesWrap">
+          <label for="relMes">Mês</label>
+          <input id="relMes" type="month" />
+        </div>
+        <div id="relAnoWrap" class="hidden">
+          <label for="relAno">Ano</label>
+          <input id="relAno" type="number" min="2020" max="2099" step="1" />
+        </div>
+        <div>
+          <button class="secondary" onclick="loadRelatorio()">Ver relatório</button>
+          <button id="relPdfBtn" onclick="gerarPdf()" disabled>Gerar PDF</button>
+        </div>
+      </div>
+      <div id="relResult"></div>
+      <div id="relContent" class="hidden">
+        <!-- KPIs -->
+        <div id="relKpis" class="totais" style="margin-top:12px;"></div>
+        <div id="relBadge" style="margin-top:4px;"></div>
+        <!-- Monthly entry table -->
+        <div id="relMonthTable" class="hidden" style="margin-top:12px;">
+          <h3>Lançamentos do mês</h3>
+          <table id="relLancTable">
+            <thead>
+              <tr><th>Data</th><th>Tipo</th><th>Categoria</th><th class="num">Valor</th><th>Descrição</th><th>Comprovante</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <p class="muted privacy" style="font-size:.72rem; margin-top:4px;">⚠️ Os links de comprovante são públicos. Evite anexar documentos com dados pessoais sensíveis.</p>
+        </div>
+        <!-- Annual charts -->
+        <div id="relCharts" class="hidden" style="margin-top:12px;">
+          <div id="relChartWarn" class="hidden" style="color:var(--err); margin-bottom:8px;">Gráficos indisponíveis (Chart.js não carregou).</div>
+          <div style="display:flex; flex-wrap:wrap; gap:16px;">
+            <div style="flex:1; min-width:280px;"><canvas id="chartBar"></canvas></div>
+            <div style="flex:1; min-width:280px;"><canvas id="chartLine"></canvas></div>
+            <div style="flex:1; min-width:200px; max-width:300px;"><canvas id="chartDonut"></canvas></div>
+          </div>
+        </div>
+        <!-- Annual category breakdown -->
+        <div id="relCategorias" class="hidden" style="margin-top:12px;"></div>
+        <!-- Annual insights -->
+        <div id="relInsights" class="hidden" style="margin-top:12px;"></div>
+      </div>
+      <div id="relPdfResult" style="margin-top:8px;"></div>
     </div>
 
     <!-- ===== Modal: Saldo de abertura ===== -->
@@ -1101,6 +1173,210 @@
           ).closeMonth(selectedMonth);
         }
       }
+
+      // ===== Relatórios =====
+      var chartBar, chartLine, chartDonut;
+      var chartJsAvailable = typeof Chart !== 'undefined';
+      var MONTH_LABELS = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+
+      function onRelTipoChange() {
+        var tipo = el('relTipo').value;
+        show('relMesWrap', tipo === 'mensal');
+        show('relAnoWrap', tipo === 'anual');
+        show('relContent', false);
+        el('relResult').innerHTML = '';
+        el('relPdfResult').innerHTML = '';
+      }
+
+      function relPeriodo() {
+        var tipo = el('relTipo').value;
+        if (tipo === 'mensal') return el('relMes').value; // YYYY-MM
+        return el('relAno').value; // YYYY
+      }
+
+      function fmtBRL(v) {
+        var n = Math.round(Number(v) * 100) / 100;
+        if (!isFinite(n)) n = 0;
+        var neg = n < 0; n = Math.abs(n);
+        var parts = n.toFixed(2).split('.');
+        var intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        return (neg ? '-' : '') + 'R$&nbsp;' + intPart + ',' + parts[1];
+      }
+
+      function loadRelatorio() {
+        var tipo = el('relTipo').value;
+        var periodo = relPeriodo();
+        if (!periodo) { box('relResult', 'Selecione um período.', 'err'); return; }
+        show('relContent', false);
+        el('relPdfResult').innerHTML = '';
+        el('relPdfBtn').disabled = true;
+
+        if (tipo === 'mensal') {
+          gsRun('Carregando relatório…',
+            function(r) { renderMonthReport(r); el('relPdfBtn').disabled = false; },
+            function(e) { box('relResult', esc(e.message), 'err'); }
+          ).getMonthlyReport(periodo);
+        } else {
+          gsRun('Carregando relatório…',
+            function(r) { renderAnnualReport(r); el('relPdfBtn').disabled = false; },
+            function(e) { box('relResult', esc(e.message), 'err'); }
+          ).getAnnualReport(Number(periodo));
+        }
+      }
+
+      function renderMonthReport(r) {
+        el('relResult').innerHTML = '';
+        show('relContent', true);
+        show('relMonthTable', true);
+        show('relCharts', false);
+        show('relCategorias', false);
+        show('relInsights', false);
+
+        var badge = r.provisorio
+          ? '<span class="pill" style="background:var(--err-bg);color:var(--err);">⚠ Provisório</span>'
+          : '<span class="pill" style="background:var(--ok-bg);color:var(--ok-dk);">✔ Oficial (fechado)</span>';
+        el('relBadge').innerHTML = badge;
+        el('relKpis').innerHTML =
+          '<div><b>' + fmtBRL(r.entradasMes) + '</b> entradas</div>' +
+          '<div><b>' + fmtBRL(r.saidasMes) + '</b> saídas</div>' +
+          '<div><b>' + fmtBRL(r.saldoMes) + '</b> saldo do mês</div>' +
+          '<div><b>' + fmtBRL(r.saldoAcumulado) + '</b> acumulado</div>';
+
+        var tbody = el('relLancTable').querySelector('tbody');
+        if (!r.lancamentos || !r.lancamentos.length) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Sem lançamentos neste período.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = r.lancamentos.map(function(l) {
+          var comp = l.TemComprovante
+            ? '<a href="' + esc(l.ComprovanteUrl) + '" target="_blank">ver</a>'
+            : '—';
+          return '<tr>'
+            + '<td>' + esc(l.Data) + '</td>'
+            + '<td>' + esc(l.Tipo) + '</td>'
+            + '<td>' + esc(l.Categoria) + '</td>'
+            + '<td class="num">' + fmtBRL(l.Valor) + '</td>'
+            + '<td>' + esc(l.Descricao) + '</td>'
+            + '<td>' + comp + '</td>'
+            + '</tr>';
+        }).join('');
+      }
+
+      function renderAnnualReport(r) {
+        el('relResult').innerHTML = '';
+        show('relContent', true);
+        show('relMonthTable', false);
+        show('relCharts', true);
+        show('relCategorias', true);
+        show('relInsights', true);
+
+        el('relBadge').innerHTML = '';
+        el('relKpis').innerHTML =
+          '<div><b>' + fmtBRL(r.totalEntradas) + '</b> entradas</div>' +
+          '<div><b>' + fmtBRL(r.totalSaidas) + '</b> saídas</div>' +
+          '<div><b>' + fmtBRL(r.resultado) + '</b> resultado (' + (r.resultado >= 0 ? 'superávit' : 'déficit') + ')</div>' +
+          '<div><b>' + fmtBRL(r.saldoAcumulado) + '</b> acumulado</div>';
+
+        // Charts
+        if (chartJsAvailable) {
+          show('relChartWarn', false);
+          renderCharts(r);
+        } else {
+          show('relChartWarn', true);
+        }
+
+        // Categorias
+        var catHtml = '<h3>Por categoria</h3><div style="display:flex; gap:16px; flex-wrap:wrap;">';
+        catHtml += '<div style="flex:1; min-width:200px;"><h4>Receitas</h4><table class="data"><tr><th>Categoria</th><th class="num">Total</th></tr>';
+        (r.porCategoriaEntrada || []).forEach(function(c) {
+          catHtml += '<tr><td>' + esc(c.categoria) + '</td><td class="num">' + fmtBRL(c.total) + '</td></tr>';
+        });
+        catHtml += '</table></div>';
+        catHtml += '<div style="flex:1; min-width:200px;"><h4>Despesas</h4><table class="data"><tr><th>Categoria</th><th class="num">Total</th></tr>';
+        (r.porCategoriaSaida || []).forEach(function(c) {
+          catHtml += '<tr><td>' + esc(c.categoria) + '</td><td class="num">' + fmtBRL(c.total) + '</td></tr>';
+        });
+        catHtml += '</table></div></div>';
+        el('relCategorias').innerHTML = catHtml;
+
+        // Insights
+        var insHtml = '<h3>Destaques do ano</h3><ul>';
+        (r.insights || []).forEach(function(s) { insHtml += '<li>' + esc(s) + '</li>'; });
+        insHtml += '</ul>';
+        el('relInsights').innerHTML = insHtml;
+      }
+
+      function renderCharts(r) {
+        var entradas = r.meses.map(function(m) { return m.entradas; });
+        var saidas = r.meses.map(function(m) { return m.saidas; });
+        var acumulado = r.meses.map(function(m) { return m.acumulado; });
+
+        // Bar chart: entradas x saídas
+        if (chartBar) chartBar.destroy();
+        chartBar = new Chart(el('chartBar'), {
+          type: 'bar',
+          data: {
+            labels: MONTH_LABELS,
+            datasets: [
+              { label: 'Entradas', data: entradas, backgroundColor: 'rgba(19,115,51,0.7)' },
+              { label: 'Saídas', data: saidas, backgroundColor: 'rgba(197,34,31,0.7)' }
+            ]
+          },
+          options: { responsive: true, plugins: { title: { display: true, text: 'Entradas × Saídas por mês' } } }
+        });
+
+        // Line chart: acumulado
+        if (chartLine) chartLine.destroy();
+        chartLine = new Chart(el('chartLine'), {
+          type: 'line',
+          data: {
+            labels: MONTH_LABELS,
+            datasets: [{ label: 'Saldo acumulado', data: acumulado, borderColor: '#1565c0', fill: false, tension: 0.3 }]
+          },
+          options: { responsive: true, plugins: { title: { display: true, text: 'Saldo acumulado' } } }
+        });
+
+        // Donut chart: despesas por categoria
+        var catLabels = (r.porCategoriaSaida || []).map(function(c) { return c.categoria; });
+        var catData = (r.porCategoriaSaida || []).map(function(c) { return c.total; });
+        var colors = ['#c5221f','#e8710a','#f9ab00','#137333','#1565c0','#7b1fa2','#c2185b','#00838f'];
+        if (chartDonut) chartDonut.destroy();
+        chartDonut = new Chart(el('chartDonut'), {
+          type: 'doughnut',
+          data: {
+            labels: catLabels,
+            datasets: [{ data: catData, backgroundColor: colors.slice(0, catLabels.length) }]
+          },
+          options: { responsive: true, plugins: { title: { display: true, text: 'Despesas por categoria' } } }
+        });
+      }
+
+      function gerarPdf() {
+        var tipo = el('relTipo').value;
+        var periodo = relPeriodo();
+        if (!periodo) { box('relPdfResult', 'Selecione um período.', 'err'); return; }
+        el('relPdfBtn').disabled = true;
+        el('relPdfResult').innerHTML = '';
+        gsRun('Gerando PDF…',
+          function(r) {
+            el('relPdfBtn').disabled = false;
+            el('relPdfResult').innerHTML = '<div class="ok-box" style="padding:8px;margin-top:4px;">📄 <a href="' + esc(r.url) + '" target="_blank">' + esc(r.name) + '</a> — link público gerado.</div>';
+          },
+          function(e) {
+            el('relPdfBtn').disabled = false;
+            box('relPdfResult', esc(e.message), 'err');
+          }
+        ).exportReportPdf(tipo, periodo);
+      }
+
+      // Init report selectors with current month/year
+      (function initRelatorio() {
+        var now = new Date();
+        var y = now.getFullYear();
+        var m = String(now.getMonth() + 1).padStart(2, '0');
+        el('relMes').value = y + '-' + m;
+        el('relAno').value = y;
+      })();
 
       // ===== bootstrap =====
       resetLancamentoForm();
