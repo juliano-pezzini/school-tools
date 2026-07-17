@@ -20,6 +20,8 @@
 
 var TZ = 'America/Sao_Paulo';
 var PROP_SHEET_ID = 'CASHFLOW_SHEET_ID';
+var PROP_COMPROVANTES_FOLDER = 'COMPROVANTES_FOLDER_ID';
+var COMPROVANTES_FOLDER_NAME = 'Fluxo de Caixa — Comprovantes';
 
 var SH_LANC = 'Lancamentos';
 var SH_CONFIG = 'Config';
@@ -195,10 +197,11 @@ function buildSheets_(ss) {
   var aud = ss.insertSheet(SH_AUD);
   ss.deleteSheet(first);
 
-  lanc.getRange(1, 1, 1, 14).setValues([[
+  lanc.getRange(1, 1, 1, 16).setValues([[
     'Id', 'Data', 'Tipo', 'Categoria', 'Valor', 'Descricao',
     'CriadoPor', 'CriadoEm', 'AlteradoPor', 'AlteradoEm',
-    'Excluido', 'ExcluidoPor', 'ExcluidoEm', 'ClientToken'
+    'Excluido', 'ExcluidoPor', 'ExcluidoEm', 'ClientToken',
+    'ComprovanteId', 'ComprovanteUrl'
   ]]).setFontWeight('bold');
 
   config.getRange(1, 1, 1, 4)
@@ -359,10 +362,71 @@ function readLancamentoRows_() {
       ExcluidoPor: String(r[11] || ''),
       ExcluidoEm: String(r[12] || ''),
       ClientToken: String(r[13] || ''),
+      ComprovanteId: String(r[14] || ''),
+      ComprovanteUrl: String(r[15] || ''),
       _row: i + 1
     });
   }
   return out;
+}
+
+// ===========================================================================
+// Comprovantes — cola de Drive (upload/link público/lixeira)
+// ===========================================================================
+//
+// A parte decidível (whitelist de tipo, teto de tamanho, nome do arquivo) vive
+// em logic.js. Aqui só a integração com o DriveApp. Os arquivos ficam numa pasta
+// dedicada e recebem link público de LEITURA (AD-011) para aparecerem nos
+// relatórios que os pais acessam sem conta do domínio.
+
+/**
+ * Pasta dedicada dos comprovantes. Pin no PropertiesService (`COMPROVANTES_FOLDER_ID`)
+ * para não recriar/duplicar; na 1ª vez encontra por nome ou cria, e persiste o id.
+ */
+function getComprovanteFolder_() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty(PROP_COMPROVANTES_FOLDER);
+  if (id) {
+    try { return DriveApp.getFolderById(id); }
+    catch (e) { /* pasta removida: cai no fluxo de recriação abaixo */ }
+  }
+  var it = DriveApp.getFoldersByName(COMPROVANTES_FOLDER_NAME);
+  var folder = it.hasNext() ? it.next() : DriveApp.createFolder(COMPROVANTES_FOLDER_NAME);
+  props.setProperty(PROP_COMPROVANTES_FOLDER, folder.getId());
+  return folder;
+}
+
+/**
+ * Sobe um comprovante para o Drive e devolve `{ fileId, url }`. `file` traz
+ * `{ name, mimeType, size, dataBase64 }` (conteúdo já em base64 puro, sem o
+ * prefixo `data:`). Valida na fronteira via logic.js (lança pt-BR se inválido);
+ * o MIME resolvido define o blob e a extensão. Link público de LEITURA (AD-011).
+ */
+function uploadComprovante_(lancamentoId, file) {
+  var v = validateComprovante_(file, {});
+  var mime = v.mimeType;
+  var bytes = Utilities.base64Decode(String(file.dataBase64 || ''));
+  var nome = comprovanteFileName_(lancamentoId, mime, Date.now());
+  var blob = Utilities.newBlob(bytes, mime, nome);
+
+  var out = getComprovanteFolder_().createFile(blob);
+  out.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return { fileId: out.getId(), url: out.getUrl() };
+}
+
+/**
+ * Manda o arquivo do comprovante para a lixeira. Tolerante: id vazio ou arquivo
+ * já inexistente não é erro (a operação de negócio não deve falhar por isso).
+ */
+function trashComprovante_(fileId) {
+  fileId = String(fileId || '').trim();
+  if (!fileId) return false;
+  try {
+    DriveApp.getFileById(fileId).setTrashed(true);
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 /** Lista de períodos `YYYY-MM` atualmente fechados (Status = `fechado`). */
@@ -616,7 +680,9 @@ function serializeRows_(rows) {
       Tipo: r.Tipo,
       Categoria: r.Categoria,
       Valor: r.Valor,
-      Descricao: r.Descricao
+      Descricao: r.Descricao,
+      ComprovanteUrl: r.ComprovanteUrl || '',
+      TemComprovante: !!(r.ComprovanteId && r.ComprovanteUrl)
     };
   });
 }
