@@ -1,7 +1,7 @@
 # Roadmap
 
-**Current Milestone:** M0 — Discovery & Platform Spikes
-**Status:** Planning
+**Current Milestone:** M1 — Fluxo de Caixa da APP (MVP)
+**Status:** In Progress (4/5 features done)
 
 ---
 
@@ -58,23 +58,24 @@
 
 ### Features
 
-**Lançamentos & Saldo** - DESIGN
+**Lançamentos & Saldo** - COMPLETE
 
-- Registrar entrada/saída com data, valor, categoria e descrição.
-- Saldo corrente automático.
-- Spec: `.specs/features/lancamentos-saldo/spec.md` (+ `context.md`, `design.md`). Inclui saldo de abertura, edição/exclusão com rastro da última alteração, e **fechamento mensal** do caixa (trava período). Caixa único; categoria texto livre com autocomplete. Tool em `cash-flow/` reusando padrões dos spikes m0-roles/m0-reports.
+- ✅ Implementado e verificado (PASS). 74→107 testes. Spec: `.specs/features/lancamentos-saldo/`.
+- Registrar entrada/saída, saldo corrente, abertura, edição/exclusão soft-delete, fechamento mensal, categoria autocomplete, idempotência, auditoria append-only.
 
-**Comprovantes** - PLANNED
+**Comprovantes** - COMPLETE
 
-- Anexar foto/scan do comprovante por lançamento.
+- ✅ Implementado e verificado (PASS). +16 testes. Spec: `.specs/features/comprovantes/`.
+- Anexo de foto/PDF por lançamento, link público (AD-011), substituir/remover, soft-delete cascata.
 
-**Papéis** - PLANNED
+**Papéis** - COMPLETE (built-in)
 
-- Perfis admin / tesoureiro / leitor.
+- ✅ Guard `requireRole_` em todos os endpoints (admin/tesoureiro/leitor), aba `Usuarios`, bootstrap anti-lockout. Padrão do spike `m0-roles` aplicado desde a implementação base.
 
-**Relatórios** - PLANNED
+**Relatórios** - COMPLETE
 
-- Relatório mensal e relatório anual com gráficos e insights.
+- ✅ Implementado e verificado (PASS). +49 testes (172 total). Spec: `.specs/features/relatorios/`.
+- Relatório mensal (totais + lista com comprovantes, provisório/oficial) e anual (KPIs, categorias, Chart.js, insights). PDF público no Drive (B-006), um por período (substitui ao regerar), auditado.
 
 **Captura por NFe/NFC-e** - PLANNED
 
