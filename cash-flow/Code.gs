@@ -1061,3 +1061,77 @@ function getAnnualReport(ano) {
   var closed = listClosedPeriodsData_().map(function (p) { return p.periodo; });
   return computeAnnualReport_(abertura, rows, Number(ano), closed);
 }
+
+// ===========================================================================
+// Relatórios service — exportação PDF + auditoria (T4)
+// ===========================================================================
+
+/**
+ * Busca um PDF existente no folder pelo nome determinístico. Retorna o File
+ * ou null se não encontrado.
+ */
+function findExistingReportPdf_(folder, tipo, periodo) {
+  var nome = reportPdfFileName_(tipo, periodo);
+  var it = folder.getFilesByName(nome);
+  return it.hasNext() ? it.next() : null;
+}
+
+/**
+ * Gera o PDF de relatório (mensal ou anual), grava no Drive com link público,
+ * substitui o anterior (se existir), audita. Guard: admin/tesoureiro.
+ * REL-10, REL-11, REL-12, REL-13, REL-14, REL-15.
+ *
+ * @param {string} tipo  'mensal' | 'anual'
+ * @param {string} periodo  'YYYY-MM' (mensal) ou 'YYYY' (anual)
+ * @returns {{ ok: boolean, url: string, name: string }}
+ */
+function exportReportPdf(tipo, periodo) {
+  var who = requireRole_(['admin', 'tesoureiro']);
+  tipo = String(tipo);
+  periodo = String(periodo);
+
+  return withLock_(function () {
+    // Compute report
+    var rows = readLancamentoRows_();
+    var abertura = aberturaConfig_();
+    var closed = listClosedPeriodsData_().map(function (p) { return p.periodo; });
+    var generatedStamp = Utilities.formatDate(new Date(), TZ, "dd/MM/yyyy 'às' HH:mm");
+
+    var html;
+    if (tipo === 'mensal') {
+      var mReport = computeMonthReport_(abertura, rows, periodo, closed);
+      html = buildMonthlyPdfHtml_(mReport, generatedStamp);
+    } else {
+      var aReport = computeAnnualReport_(abertura, rows, Number(periodo), closed);
+      html = buildAnnualPdfHtml_(aReport, generatedStamp);
+    }
+
+    // Generate PDF blob
+    var nome = reportPdfFileName_(tipo, periodo);
+    var blob = Utilities.newBlob(html, 'text/html', 'relatorio.html').getAs('application/pdf');
+    blob.setName(nome);
+
+    // Trash existing PDF for the same period (REL-11)
+    var folder = getReportFolder_();
+    var existing = findExistingReportPdf_(folder, tipo, periodo);
+    if (existing) {
+      existing.setTrashed(true);
+    }
+
+    // Create and share
+    var file = folder.createFile(blob);
+    try {
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    } catch (e) {
+      // REL-15: no orphan — trash the file before rethrowing
+      file.setTrashed(true);
+      throw e;
+    }
+
+    // Audit (REL-12)
+    appendAudit_('gerar_relatorio', tipo + ':' + periodo,
+      JSON.stringify({ tipo: tipo, periodo: periodo, url: file.getUrl(), nome: nome }));
+
+    return { ok: true, url: file.getUrl(), name: file.getName() };
+  });
+}
