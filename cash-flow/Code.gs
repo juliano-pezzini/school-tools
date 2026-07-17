@@ -1014,3 +1014,50 @@ function reopenMonth(periodo) {
     return { ok: true };
   });
 }
+
+// ===========================================================================
+// Relatórios service — endpoints de leitura (T3)
+// ===========================================================================
+
+var PROP_REPORT_FOLDER = 'REPORT_FOLDER_ID';
+var REPORT_FOLDER_NAME = 'Fluxo de Caixa — Relatórios';
+
+/**
+ * Pasta dedicada dos relatórios PDF. Pin no PropertiesService
+ * (`REPORT_FOLDER_ID`), recria se a pasta sumiu. Padrão: getComprovanteFolder_.
+ */
+function getReportFolder_() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty(PROP_REPORT_FOLDER);
+  if (id) {
+    try { return DriveApp.getFolderById(id); } catch (e) { /* pasta sumiu — recria */ }
+  }
+  var it = DriveApp.getFoldersByName(REPORT_FOLDER_NAME);
+  var folder = it.hasNext() ? it.next() : DriveApp.createFolder(REPORT_FOLDER_NAME);
+  props.setProperty(PROP_REPORT_FOLDER, folder.getId());
+  return folder;
+}
+
+/**
+ * Relatório mensal para a UI. Guard: admin/tesoureiro. Lê rows uma vez,
+ * delega à lógica pura computeMonthReport_. REL-01..04, REL-14.
+ */
+function getMonthlyReport(mes) {
+  requireRole_(['admin', 'tesoureiro']);
+  var rows = readLancamentoRows_();
+  var abertura = aberturaConfig_();
+  var closed = listClosedPeriodsData_().map(function (p) { return p.periodo; });
+  return computeMonthReport_(abertura, rows, String(mes), closed);
+}
+
+/**
+ * Relatório anual para a UI. Guard: admin/tesoureiro. Lê rows uma vez,
+ * delega à lógica pura computeAnnualReport_. REL-05..09, REL-14.
+ */
+function getAnnualReport(ano) {
+  requireRole_(['admin', 'tesoureiro']);
+  var rows = readLancamentoRows_();
+  var abertura = aberturaConfig_();
+  var closed = listClosedPeriodsData_().map(function (p) { return p.periodo; });
+  return computeAnnualReport_(abertura, rows, Number(ano), closed);
+}
