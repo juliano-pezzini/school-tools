@@ -29,6 +29,25 @@
       a sugestão única no autocomplete.
   10. Conferir saldo negativo (forçar saída > saldo) → exibido em vermelho, sem
       bloquear. Conferir as 5 abas e linhas na Auditoria.
+  ---- Comprovantes (M1) ----
+  PRÉ: se a planilha de dados JÁ existia antes desta versão, adicionar à mão os
+      cabeçalhos das colunas 15/16 de "Lancamentos": ComprovanteId, ComprovanteUrl
+      (buildSheets_ só roda na criação). Planilha nova já vem com as 16 colunas.
+  11. Novo lançamento COM comprovante: escolher uma foto/PDF (≤10 MB) no campo
+      "Comprovante" → nome aparece com 📎 → "Adicionar" → lançamento entra e, logo
+      após, "adicionado com comprovante". Na lista, coluna Comprovante mostra "ver"
+      (abre o arquivo no Drive por link público). Conferir Auditoria (ação=anexar)
+      e a pasta "Fluxo de Caixa — Comprovantes" no Drive com o arquivo.
+  11b.Tipo inválido (ex.: .txt) ou > 10 MB → bloqueado no cliente com mensagem
+      pt-BR, nada é enviado. Foto de celular com MIME vazio ainda é aceita (infere
+      pela extensão).
+  12. Na lista, "trocar" um comprovante existente → arquivo novo substitui; o
+      antigo vai para a lixeira do Drive; Auditoria registra (substituir). "remover"
+      → confirma → coluna volta a "anexar"; arquivo na lixeira; Auditoria (remover_comprovante).
+  13. Excluir (soft-delete) um lançamento que tem comprovante → arquivo vai para a
+      lixeira e as colunas 15/16 ficam vazias; Auditoria (excluir | comprovante removido).
+  14. Anexar/trocar/remover em MÊS FECHADO é bloqueado ("período MM/AAAA fechado");
+      reabrir o mês volta a permitir.
   ===========================================================================
 -->
 <html lang="pt-BR">
@@ -155,6 +174,7 @@
       .result { padding: 10px 12px; border-radius: var(--r-md); margin-top: 10px; font-size: .88rem; font-weight: 600; }
       .ok  { background: var(--ok-bg);  color: var(--ok-dk); }
       .err { background: var(--err-bg); color: var(--err-dk); }
+      .warn { background: var(--warn-bg); color: var(--warn-dk); }
       .hidden { display: none; }
       .actions button { padding: 5px 9px; font-size: .8rem; margin-right: 4px; }
       .field { margin-bottom: 8px; }
@@ -267,6 +287,12 @@
         <label for="lDescricao">Descrição</label>
         <textarea id="lDescricao" maxlength="280" placeholder="Descrição do lançamento"></textarea>
       </div>
+      <div class="field" style="margin-top:8px;">
+        <label for="lComprovante">Comprovante (opcional)</label>
+        <input id="lComprovante" type="file" accept="image/*,application/pdf" capture="environment" onchange="onComprovanteChosen()" />
+        <div id="lComprovanteInfo" class="muted" style="margin-top:4px;"></div>
+        <div class="muted" style="margin-top:2px; font-size:.72rem;">⚠️ O comprovante fica acessível por link público (aparece nos relatórios aos pais). Não anexe documentos com dados sigilosos.</div>
+      </div>
       <div class="row" style="margin-top:4px;">
         <button id="lSalvar" onclick="submitLancamento()">Adicionar</button>
         <button id="lCancelar" class="ghost hidden" onclick="resetLancamentoForm()">Cancelar edição</button>
@@ -298,10 +324,11 @@
       <div id="listResult"></div>
       <table id="listTable" class="hidden">
         <thead>
-          <tr><th>Data</th><th>Tipo</th><th>Categoria</th><th class="num">Valor</th><th>Descrição</th><th>Ações</th></tr>
+          <tr><th>Data</th><th>Tipo</th><th>Categoria</th><th class="num">Valor</th><th>Descrição</th><th>Comprovante</th><th>Ações</th></tr>
         </thead>
         <tbody></tbody>
       </table>
+      <input id="rowComprovante" type="file" accept="image/*,application/pdf" capture="environment" style="display:none" onchange="onRowComprovanteChosen()" />
     </div>
 
     <!-- ===== Modal: Saldo de abertura ===== -->
@@ -378,6 +405,47 @@
             var lbl = periodo.split('-');
             return 'O período ' + lbl[1] + '/' + lbl[0] + ' está fechado. Reabra-o para alterar.';
           }
+        }
+        return '';
+      }
+      // ---- Comprovante: espelho client-side de validateComprovante_ (logic.js) ----
+      var COMPROVANTE_TIPOS = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf'];
+      var COMPROVANTE_MAX_BYTES = 10 * 1024 * 1024;
+      function comprovanteExt_(name) {
+        var s = String(name == null ? '' : name);
+        var dot = s.lastIndexOf('.');
+        if (dot < 0 || dot === s.length - 1) return '';
+        return s.substring(dot + 1).toLowerCase();
+      }
+      function comprovanteMimeForExt_(ext) {
+        switch (String(ext || '').toLowerCase()) {
+          case 'jpg': case 'jpeg': return 'image/jpeg';
+          case 'png': return 'image/png';
+          case 'webp': return 'image/webp';
+          case 'heic': return 'image/heic';
+          case 'heif': return 'image/heif';
+          case 'pdf': return 'application/pdf';
+          default: return '';
+        }
+      }
+      // Retorna string de erro pt-BR (idêntica ao servidor) ou '' se ok.
+      function validateComprovanteClient_(file) {
+        if (!file || String(file.name == null ? '' : file.name).trim() === '') {
+          return 'Selecione um arquivo de comprovante.';
+        }
+        var reported = String(file.type || '').toLowerCase();
+        var resolved = '';
+        if (reported && COMPROVANTE_TIPOS.indexOf(reported) >= 0) {
+          resolved = reported;
+        } else {
+          var inf = comprovanteMimeForExt_(comprovanteExt_(file.name));
+          if (inf && COMPROVANTE_TIPOS.indexOf(inf) >= 0) resolved = inf;
+        }
+        if (!resolved) return 'Tipo de arquivo não permitido. Use imagem (JPG, PNG, WEBP, HEIC) ou PDF.';
+        var size = Number(file.size);
+        if (!(size > 0)) return 'O arquivo do comprovante está vazio.';
+        if (size > COMPROVANTE_MAX_BYTES) {
+          return 'O comprovante excede o limite de ' + Math.round(COMPROVANTE_MAX_BYTES / (1024 * 1024)) + ' MB.';
         }
         return '';
       }
@@ -725,15 +793,24 @@
           ).editLancamento(_editId, _item);
         } else {
           var _item2 = item;
+          var fileEl = el('lComprovante');
+          var chosen = (fileEl && fileEl.files && fileEl.files[0]) ? fileEl.files[0] : null;
+          if (chosen) {
+            var cErr = validateComprovanteClient_(chosen);
+            if (cErr) { box('lResult', '❌ ' + esc(cErr), 'err'); btn.disabled = false; return; }
+          }
           // Otimista: insere na grade ANTES do servidor responder.
           optimisticAdd(_item2);
-          box('lResult','✅ Lançamento adicionado.','ok');
+          box('lResult', chosen ? '✅ Lançamento adicionado. Anexando comprovante…' : '✅ Lançamento adicionado.', 'ok');
           el('lValor').value = ''; el('lDescricao').value = '';
           goToMonthOfBR(_item2.data);
           btn.disabled = false;
           gsRun('Confirmando…',
-            function(){
+            function(res){
               clientToken = uuid();
+              var realId = res && res.id;
+              if (chosen && realId) { attachComprovante_(realId, chosen); }
+              resetComprovanteField_();
               refreshAll();
             },
             function(e){ box('lResult','❌ '+esc(e.message),'err'); refreshAll(); }
@@ -761,18 +838,104 @@
         el('lSalvar').textContent = 'Adicionar';
         el('lValor').value = ''; el('lCategoria').value = ''; el('lDescricao').value = '';
         el('lTipo').value = 'entrada';
+        resetComprovanteField_();
         show('lCancelar', false);
       }
       function afterWrite(){ refreshAll(); }
 
+      // ===== Comprovante (anexar/ver/trocar/remover) =====
+      var _rowComp = { id: null, mode: null };
+      /** Mostra o nome do arquivo escolhido no formulário e valida (espelho client). */
+      function onComprovanteChosen(){
+        var f = (el('lComprovante').files || [])[0];
+        if (!f) { el('lComprovanteInfo').textContent = ''; return; }
+        var err = validateComprovanteClient_(f);
+        el('lComprovanteInfo').innerHTML = err
+          ? '<span style="color:var(--err-dk)">❌ '+esc(err)+'</span>'
+          : '📎 '+esc(f.name);
+      }
+      function resetComprovanteField_(){
+        el('lComprovante').value = '';
+        el('lComprovanteInfo').textContent = '';
+      }
+      /** Lê o File → payload { name, mimeType, size, bytesBase64 } (sem o prefixo data:). */
+      function readComprovantePayload_(file, onOk, onErr){
+        var reader = new FileReader();
+        reader.onload = function(){
+          var res = String(reader.result || '');
+          var comma = res.indexOf(',');
+          var b64 = comma >= 0 ? res.substring(comma + 1) : res;
+          onOk({ name: file.name, mimeType: file.type || '', size: file.size, bytesBase64: b64 });
+        };
+        reader.onerror = function(){ onErr && onErr(new Error('Falha ao ler o arquivo.')); };
+        reader.readAsDataURL(file);
+      }
+      /** Anexa/substitui o comprovante de um lançamento recém-criado (falha não perde o lançamento). */
+      function attachComprovante_(id, file){
+        readComprovantePayload_(file, function(payload){
+          gsRun('Anexando comprovante…',
+            function(){ box('lResult','✅ Lançamento adicionado com comprovante.','ok'); refreshAll(); },
+            function(e){ box('lResult','⚠️ Lançamento salvo, mas o comprovante não foi anexado: '+esc(e.message)+' Tente anexar de novo pela lista.','warn'); }
+          ).setComprovante(id, payload);
+        }, function(){ box('lResult','⚠️ Lançamento salvo, mas falha ao ler o comprovante. Tente anexar de novo pela lista.','warn'); });
+      }
+      /** Abre o seletor de arquivo para anexar/trocar o comprovante de uma linha. */
+      function onComprovante(id, mode){
+        _rowComp = { id: id, mode: mode };
+        var inp = el('rowComprovante');
+        inp.value = '';
+        inp.click();
+      }
+      function onRowComprovanteChosen(){
+        var f = (el('rowComprovante').files || [])[0];
+        if (!f || !_rowComp.id) return;
+        var err = validateComprovanteClient_(f);
+        if (err) { box('listResult', '❌ ' + esc(err), 'err'); return; }
+        var id = _rowComp.id, trocar = (_rowComp.mode === 'trocar');
+        readComprovantePayload_(f, function(payload){
+          gsRun('Anexando comprovante…',
+            function(){ box('listResult','✅ Comprovante '+(trocar?'atualizado':'anexado')+'.','ok'); refreshAll(); },
+            function(e){ box('listResult','❌ '+esc(e.message),'err'); refreshAll(); }
+          ).setComprovante(id, payload);
+        }, function(){ box('listResult','❌ Falha ao ler o arquivo.','err'); });
+      }
+      function onRemoveComprovante(id){
+        var row = ROWS[id];
+        if (row){
+          var delErr = validateDeleteClient_(dateToInput(row.Data), Object.keys(closedSet));
+          if (delErr) { box('listResult', '❌ ' + esc(delErr), 'err'); return; }
+        }
+        if (!window.confirm('Remover o comprovante deste lançamento? O arquivo vai para a lixeira do Drive.')) return;
+        gsRun('Removendo comprovante…',
+          function(){ box('listResult','✅ Comprovante removido.','ok'); refreshAll(); },
+          function(e){ box('listResult','❌ '+esc(e.message),'err'); refreshAll(); }
+        ).removeComprovante(id);
+      }
+
       /** Gera o HTML de uma <tr> a partir de um row serializado (Id, Data ISO, Tipo, etc.). */
       function renderRowHtml(r){
+        var rISO = dateToInput(r.Data);
+        var periodo = rISO ? rISO.substring(0,7) : '';
+        var aberto = !closedSet[periodo];
+        var comp;
+        if (r.TemComprovante){
+          comp = '<a href="'+esc(r.ComprovanteUrl)+'" target="_blank" rel="noopener">ver</a>';
+          if (aberto){
+            comp += ' <button class="ghost" onclick="onComprovante(\''+esc(r.Id)+'\',\'trocar\')">trocar</button>'
+                  + ' <button class="ghost" onclick="onRemoveComprovante(\''+esc(r.Id)+'\')">remover</button>';
+          }
+        } else {
+          comp = aberto
+            ? '<button class="ghost" onclick="onComprovante(\''+esc(r.Id)+'\',\'anexar\')">anexar</button>'
+            : '<span class="muted">—</span>';
+        }
         return '<tr data-id="'+esc(r.Id)+'">'+
           '<td>'+esc(dateToBR(r.Data))+'</td>'+
           '<td><span class="tag '+esc(r.Tipo)+'">'+esc(r.Tipo)+'</span></td>'+
           '<td>'+esc(r.Categoria)+'</td>'+
           '<td class="num">'+fmtBRL(r.Valor)+'</td>'+
           '<td>'+esc(r.Descricao)+'</td>'+
+          '<td>'+comp+'</td>'+
           '<td class="actions">'+
             '<button class="ghost" onclick="onEdit(\''+esc(r.Id)+'\')">editar</button>'+
             '<button class="danger" onclick="onDelete(\''+esc(r.Id)+'\')">excluir</button>'+
@@ -822,7 +985,7 @@
         var newDelta = (item.tipo === 'entrada') ? n : -n;
         optimisticSaldo(newDelta);
         // Atualiza o row em memória.
-        var r = { Id: id, Data: el('lData').value, Tipo: item.tipo, Categoria: item.categoria, Valor: n, Descricao: item.descricao };
+        var r = { Id: id, Data: el('lData').value, Tipo: item.tipo, Categoria: item.categoria, Valor: n, Descricao: item.descricao, ComprovanteUrl: old.ComprovanteUrl, TemComprovante: old.TemComprovante };
         ROWS[id] = r;
         // Atualiza a <tr> no DOM.
         var tr = el('listTable').querySelector('tr[data-id="'+id+'"]');
