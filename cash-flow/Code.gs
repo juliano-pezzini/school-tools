@@ -549,6 +549,8 @@ function editLancamento(id, item) {
 /**
  * Exclusão LÓGICA (soft-delete): marca Excluido=true + ExcluidoPor/ExcluidoEm,
  * nunca remove a linha, e anexa auditoria(`excluir`). Revalida período aberto.
+ * Se houver comprovante anexado, manda o arquivo para a lixeira e limpa
+ * ComprovanteId/Url (COMP-07), tudo dentro do lock já existente.
  */
 function deleteLancamento(id) {
   var who = requireRole_(['admin', 'tesoureiro']);
@@ -559,10 +561,18 @@ function deleteLancamento(id) {
 
     assertPeriodOpen_(current.Data, closedPeriods_());
 
-    getSheet_(SH_LANC).getRange(current._row, 11, 1, 3)
+    var sheet = getSheet_(SH_LANC);
+    sheet.getRange(current._row, 11, 1, 3)
       .setValues([[true, who.email, nowStamp_()]]);
 
-    appendAudit_('excluir', id, resumoRow_(current));
+    var tinhaComprovante = !!current.ComprovanteId;
+    if (tinhaComprovante) {
+      trashComprovante_(current.ComprovanteId);
+      sheet.getRange(current._row, 15, 1, 2).setValues([['', '']]);
+    }
+
+    appendAudit_('excluir', id,
+      resumoRow_(current) + (tinhaComprovante ? ' | comprovante removido' : ''));
     return { ok: true };
   });
 }
