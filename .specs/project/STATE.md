@@ -1,6 +1,6 @@
 # State
 
-**Last Updated:** 2026-07-17
+**Last Updated:** 2026-07-18
 **Current Work:** **M1 — Fluxo de Caixa MVP: ✅ COMPLETO (5/5 features).** Todas as features implementadas e verificadas (PASS):
 - **Lançamentos & Saldo** (107 testes) — entrada/saída, saldo, abertura, edição/exclusão soft-delete, fechamento mensal, categoria autocomplete, idempotência, auditoria.
 - **Comprovantes** (+16 testes) — foto/PDF por lançamento, link público (AD-011), substituir/remover, soft-delete cascata.
@@ -15,6 +15,13 @@ Em paralelo, B-002 (Robô da Biblioteca/MSTECH) aguarda infos da bibliotecária.
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-012: Versionamento visível (semver automática) nos apps (2026-07-18)
+
+**Decision:** Cada superfície exibe um **badge de versão discreto** (canto fixo, `pointer-events:none`) com a versão **semver do repositório**. A versão é **calculada pela pipeline** a partir da última tag + Conventional Commits (`mathieudutour/github-tag-action@v6.2`, `default_bump: false`) e **cria a tag `vX.Y.Z` no commit publicado**. Nos 4 apps do Apps Script a versão é **injetada por `sed` no deploy** (mesmo padrão dos URLs do portal, placeholder `__APP_VERSION__`); as 2 páginas estáticas (`docs/scanner`, `docs/nota`) — servidas direto do repo pelo GitHub Pages — buscam a **última tag em runtime** via API pública do GitHub, com degradação graciosa. Fora do deploy, o badge mostra `dev`. Lógica pura testável: `versionLabel_` (`cash-flow/logic.js`, +10 testes → **198 total**).
+**Reason:** Sem versão visível, o troubleshooting era às cegas (não dava para correlacionar o relato do usuário ao commit/deploy). Semver automática dispensa bump manual e mantém o badge rastreável 1:1 à tag.
+**Trade-off:** Dois mecanismos (injeção no deploy vs. fetch runtime) por causa dos dois modelos de hospedagem (clasp vs. Pages-from-repo); as páginas estáticas dependem da API do GitHub em runtime (rate-limit 60/h por IP, aceitável no uso escolar, com fallback gracioso). Exceção consciente ao padrão "sed no deploy".
+**Impact:** Feature `app-versioning` (spec/design/tasks/validation em `.specs/features/app-versioning/`). Todo novo app/superfície deve incluir o mesmo badge; o job `version` do `deploy.yml` é o ponto único de cálculo/tag.
 
 ### AD-011: Comprovantes expostos por link público do Drive (2026-07-16)
 
