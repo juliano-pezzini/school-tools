@@ -70,9 +70,18 @@
     <!-- ZXing entra so como fallback quando o BarcodeDetector nativo nao existe. -->
     <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
     <script>
-      // ?return=<URL do /exec do Apps Script> — para onde devolver o codigo lido.
+      // Parametros de URL
       var params = new URLSearchParams(location.search);
       var returnUrl = params.get('return');
+      var MODE = params.get('mode'); // 'nfe' = novo fluxo de extracao
+      var PROXY_PADRAO = 'https://script.google.com/macros/s/AKfycbyTh-HYAiSLVhDV633FE7gGrB6pXjC8MsktztvSG09ZtvWV7_ieBHQ6DCxcl3dWvpIgsQ/exec';
+      var PROXY_URL = params.get('proxy') || PROXY_PADRAO;
+
+      var UF = {
+        11:'RO',12:'AC',13:'AM',14:'RR',15:'PA',16:'AP',17:'TO',21:'MA',22:'PI',23:'CE',
+        24:'RN',25:'PB',26:'PE',27:'AL',28:'SE',29:'BA',31:'MG',32:'ES',33:'RJ',35:'SP',
+        41:'PR',42:'SC',43:'RS',50:'MS',51:'MT',52:'GO',53:'DF'
+      };
 
       var FORMATOS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'itf', 'qr_code'];
       var video = document.getElementById('video');
@@ -81,7 +90,6 @@
       var track = null;
 
       // Confirmacao anti-erro: so aceita um codigo apos 2 leituras IGUAIS seguidas.
-      // Codigo de barras borrado gera falso positivo (valores diferentes) — isso filtra.
       var ultimo = null, repeticoes = 0;
 
       function setStatus(msg, cls) {
@@ -90,8 +98,7 @@
         s.className = 'status' + (cls ? ' ' + cls : '');
       }
 
-      // Abre a camera EU MESMO (em vez de deixar a lib abrir) — assim controlo foco
-      // continuo e lanterna de forma confiavel no track real.
+      // ==================== Camera ====================
       async function abrirCamera() {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
@@ -104,8 +111,6 @@
         await video.play();
         track = stream.getVideoTracks()[0];
         ajustarCamera();
-        // A capability `torch` em alguns Samsung so e' reportada um tempo depois
-        // de iniciar — tentamos algumas vezes antes de desistir.
         var tentativas = 0;
         var t = setInterval(function () {
           tentativas++;
@@ -114,8 +119,6 @@
             clearInterval(t);
           } else if (tentativas >= 6) {
             clearInterval(t);
-            // Capability nunca reportada: mostra o botao mesmo assim — no S24+ o
-            // acionamento direto via applyConstraints costuma funcionar.
             prepararLanterna();
           }
         }, 600);
@@ -155,24 +158,6 @@
         torchOn = false;
       }
 
-      // Recebe um candidato; so confirma apos 2 leituras identicas seguidas.
-      function candidato(code, formato) {
-        if (parado) return;
-        if (code === ultimo) {
-          repeticoes++;
-        } else {
-          ultimo = code;
-          repeticoes = 1;
-        }
-        if (repeticoes >= 2) aceitar(code, formato);
-      }
-
-      function aceitar(code, formato) {
-        parado = true;
-        pararCamera();
-        mostrar(code, formato);
-      }
-
       function pararCamera() {
         try { if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
         stream = null;
@@ -180,17 +165,39 @@
         esconderLanterna();
       }
 
-      // --- Motor 1 (preferido): BarcodeDetector nativo do Android/Chrome ---
+      // ==================== Leitura (BarcodeDetector + ZXing) ====================
+      function candidato(code) {
+        if (parado) return;
+        if (code === ultimo) {
+          repeticoes++;
+        } else {
+          ultimo = code;
+          repeticoes = 1;
+        }
+        if (repeticoes >= 2) aceitar(code);
+      }
+
+      function aceitar(code) {
+        if (MODE === 'nfe') {
+          processarNfe(code);
+        } else {
+          parado = true;
+          pararCamera();
+          mostrarLegado(code);
+        }
+      }
+
+      // --- Motor 1: BarcodeDetector nativo ---
       async function loopNativo(detector) {
         if (parado) return;
         try {
           var codes = await detector.detect(video);
-          if (codes && codes.length) candidato(codes[0].rawValue, codes[0].format);
-        } catch (e) { /* quadro sem leitura — normal */ }
+          if (codes && codes.length) candidato(codes[0].rawValue);
+        } catch (e) {}
         if (!parado) requestAnimationFrame(function () { loopNativo(detector); });
       }
 
-      // --- Motor 2 (fallback): ZXing sobre o stream que EU abri ---
+      // --- Motor 2: ZXing fallback ---
       function iniciarZXing() {
         var hints = new Map();
         hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
@@ -202,7 +209,7 @@
         ]);
         var reader = new ZXing.BrowserMultiFormatReader(hints);
         reader.decodeFromStream(stream, video, function (result) {
-          if (result && !parado) candidato(result.getText(), result.getBarcodeFormat());
+          if (result && !parado) candidato(result.getText());
         }).catch(function (e) {
           setStatus('Erro no leitor: ' + (e && e.message ? e.message : e), 'err');
         });
@@ -231,10 +238,11 @@
         }
       }
 
-      function mostrar(code, formato) {
+      // ==================== Modo legado (sem ?mode=nfe) ====================
+      function mostrarLegado(code) {
         document.getElementById('code').textContent = code;
         document.getElementById('resultado').hidden = false;
-        setStatus('Codigo lido (formato ' + formato + ')!', 'ok');
+        setStatus('Codigo lido!', 'ok');
         if (navigator.vibrate) navigator.vibrate(120);
 
         document.getElementById('enviar').onclick = function () {
@@ -251,6 +259,290 @@
         document.getElementById('denovo').onclick = iniciar;
       }
 
+      // ==================== Modo NFe (?mode=nfe) ====================
+
+      // --- Utilidades ---
+      function base64url(str) {
+        return btoa(unescape(encodeURIComponent(str)))
+          .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+
+      function extrairChave(valor) {
+        if (!valor) return null;
+        var v = String(valor).trim();
+        var m = v.match(/[?&]p=([^|&]+)/i);
+        if (m) { var c = m[1].replace(/\D/g, ''); if (c.length >= 44) return c.slice(0, 44); }
+        var d = v.replace(/\D/g, '');
+        var m44 = d.match(/\d{44}/);
+        return m44 ? m44[0] : null;
+      }
+
+      function dvChave(ch43) {
+        var pesos = [2, 3, 4, 5, 6, 7, 8, 9], soma = 0, p = 0;
+        for (var i = ch43.length - 1; i >= 0; i--) {
+          soma += parseInt(ch43.charAt(i), 10) * pesos[p % 8];
+          p++;
+        }
+        var dv = 11 - (soma % 11);
+        return dv >= 10 ? 0 : dv;
+      }
+
+      function chaveValida(ch) {
+        return /^\d{44}$/.test(ch) && dvChave(ch.slice(0, 43)) === parseInt(ch.charAt(43), 10);
+      }
+
+      function fmtCNPJ(c) {
+        return c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+      }
+
+      function decodeBase64Utf8(b64) {
+        var bin = atob(b64);
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return new TextDecoder('utf-8').decode(bytes);
+      }
+
+      function txt(node, tag) {
+        var el = node.getElementsByTagName(tag)[0];
+        return el ? el.textContent : '';
+      }
+
+      function redirecionarComDados(scanData) {
+        if (!returnUrl) {
+          setStatus('Dados extraidos mas sem URL de retorno (?return=).', 'err');
+          document.getElementById('code').textContent = JSON.stringify(scanData, null, 2);
+          document.getElementById('resultado').hidden = false;
+          return;
+        }
+        var sep = returnUrl.indexOf('?') >= 0 ? '&' : '?';
+        location.href = returnUrl + sep + 'scanData=' + base64url(JSON.stringify(scanData));
+      }
+
+      // --- Fluxo NFe principal ---
+      function processarNfe(code) {
+        var ch = extrairChave(code);
+        if (!ch) {
+          // Nao e nota fiscal — ignorar silenciosamente, continuar escaneando
+          return;
+        }
+        if (!chaveValida(ch)) {
+          setStatus('Código inválido — escaneie novamente', 'err');
+          ultimo = null;
+          repeticoes = 0;
+          return;
+        }
+        // Chave valida — parar scanner e processar
+        parado = true;
+        pararCamera();
+        if (navigator.vibrate) navigator.vibrate(120);
+
+        var modelo = ch.slice(20, 22);
+        var cUF = ch.slice(0, 2);
+        var sefazUrl = extrairSefazUrl(code);
+
+        if (modelo === '55') {
+          processarNFeModelo55(ch);
+        } else if (modelo === '65') {
+          processarNFCe(ch, cUF, sefazUrl);
+        } else {
+          fallbackBrasilAPI(ch, '');
+        }
+      }
+
+      function extrairSefazUrl(code) {
+        var v = String(code).trim();
+        if (/^https?:\/\//i.test(v)) return v;
+        return '';
+      }
+
+      // --- NFe modelo 55: proxy ---
+      async function processarNFeModelo55(ch) {
+        setStatus('Consultando nota fiscal…');
+        try {
+          var sep = PROXY_URL.indexOf('?') >= 0 ? '&' : '?';
+          var url = PROXY_URL + sep + 'chave=' + encodeURIComponent(ch);
+          var r = await fetch(url, { method: 'GET' });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          var data = await r.json();
+          if (!data.xml_base64) throw new Error('Sem XML na resposta');
+
+          var xml = decodeBase64Utf8(data.xml_base64);
+          var doc = new DOMParser().parseFromString(xml, 'application/xml');
+
+          var emit = doc.getElementsByTagName('emit')[0];
+          var fornecedor = emit ? txt(emit, 'xNome') : '';
+          var ender = emit ? emit.getElementsByTagName('enderEmit')[0] : null;
+          var cidade = ender ? txt(ender, 'xMun') : '';
+          var uf = ender ? txt(ender, 'UF') : '';
+
+          var dhEmi = txt(doc, 'dhEmi');
+          var dataISO = dhEmi ? dhEmi.slice(0, 10) : '';
+
+          var icmsTot = doc.getElementsByTagName('ICMSTot')[0];
+          var valor = icmsTot ? parseFloat(txt(icmsTot, 'vNF')) : 0;
+          if (isNaN(valor)) valor = 0;
+
+          var dets = doc.getElementsByTagName('det');
+          var itensArr = [];
+          for (var i = 0; i < dets.length; i++) {
+            var prod = dets[i].getElementsByTagName('prod')[0];
+            if (!prod) continue;
+            var nome = txt(prod, 'xProd');
+            var q = txt(prod, 'qCom');
+            itensArr.push(nome + ' (' + q + ')');
+          }
+          var itens = itensArr.join('; ');
+
+          redirecionarComDados({
+            fornecedor: fornecedor,
+            cidade: cidade,
+            uf: uf,
+            data: dataISO,
+            valor: valor,
+            itens: itens,
+            link: '',
+            parcial: false
+          });
+        } catch (e) {
+          fallbackBrasilAPI(ch, '');
+        }
+      }
+
+      // --- NFC-e modelo 65: client-side SEFAZ fetch ---
+      async function processarNFCe(ch, cUF, sefazUrl) {
+        // Apenas SC (cUF=42) tenta parse client-side
+        if (cUF !== '42' || !sefazUrl) {
+          fallbackBrasilAPI(ch, sefazUrl);
+          return;
+        }
+        setStatus('Consultando SEFAZ…');
+        try {
+          var r = await fetch(sefazUrl, { mode: 'cors' });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          var html = await r.text();
+          var parsed = parseSefazHtml(html);
+          if (!parsed) throw new Error('Parse falhou');
+
+          var ano = '20' + ch.slice(2, 4);
+          var mes = ch.slice(4, 6);
+
+          redirecionarComDados({
+            fornecedor: parsed.fornecedor || '',
+            cidade: parsed.cidade || '',
+            uf: UF[parseInt(cUF, 10)] || '',
+            data: parsed.data || (ano + '-' + mes + '-01'),
+            valor: parsed.valor || 0,
+            itens: parsed.itens || '',
+            link: sefazUrl,
+            parcial: false
+          });
+        } catch (e) {
+          fallbackBrasilAPI(ch, sefazUrl);
+        }
+      }
+
+      // --- Parse SEFAZ-SC HTML (best-effort) ---
+      function parseSefazHtml(html) {
+        try {
+          var doc = new DOMParser().parseFromString(html, 'text/html');
+
+          // Fornecedor
+          var fornecedor = '';
+          var emitEl = doc.querySelector('.txtTit2, .NFCDetalhe_Emitente, #u20');
+          if (emitEl) fornecedor = emitEl.textContent.trim();
+          if (!fornecedor) {
+            var spans = doc.querySelectorAll('div, span');
+            for (var i = 0; i < spans.length; i++) {
+              var t = spans[i].textContent.trim();
+              if (t.length > 5 && t.length < 100 && /CNPJ/.test((spans[i].parentElement && spans[i].parentElement.textContent) || '')) {
+                fornecedor = t;
+                break;
+              }
+            }
+          }
+
+          // Valor total
+          var valor = 0;
+          var totalEl = doc.querySelector('.txtMax, .totalNumb, #linhaTotal .txtTit');
+          if (totalEl) {
+            var vt = totalEl.textContent.replace(/[^\d,.]/g, '').replace(/\./g, '').replace(',', '.');
+            valor = parseFloat(vt) || 0;
+          }
+          if (!valor) {
+            var allText = doc.body.innerHTML;
+            var mTotal = allText.match(/[Vv]alor\s*[Tt]otal[^<]*?R?\$?\s*([\d.,]+)/);
+            if (mTotal) {
+              var vn = mTotal[1].replace(/\./g, '').replace(',', '.');
+              valor = parseFloat(vn) || 0;
+            }
+          }
+
+          // Data emissao
+          var data = '';
+          var mData = doc.body.textContent.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+          if (mData) data = mData[3] + '-' + mData[2] + '-' + mData[1];
+
+          // Itens
+          var itens = '';
+          var rows = doc.querySelectorAll('.txtTit, .NFCDetalhe_Item, tr');
+          var itensArr = [];
+          for (var j = 0; j < rows.length && itensArr.length < 30; j++) {
+            var rt = rows[j].textContent.trim();
+            if (rt.length > 3 && rt.length < 120 && /\d/.test(rt) && !/Total|CNPJ|Chave/.test(rt)) {
+              itensArr.push(rt.replace(/\s+/g, ' '));
+            }
+          }
+          if (itensArr.length > 0) itens = itensArr.slice(0, 20).join('; ');
+
+          // Cidade
+          var cidade = '';
+          var mCidade = doc.body.textContent.match(/([A-Z\u00C0-\u00FF][a-z\u00E0-\u00FF]+(?:\s+[A-Z\u00C0-\u00FF][a-z\u00E0-\u00FF]+)*)\s*[-\/]\s*SC/);
+          if (mCidade) cidade = mCidade[1];
+
+          if (!fornecedor && !valor) return null;
+          return { fornecedor: fornecedor, cidade: cidade, data: data, valor: valor, itens: itens };
+        } catch (e) {
+          return null;
+        }
+      }
+
+      // --- Fallback: decode key + BrasilAPI ---
+      async function fallbackBrasilAPI(ch, link) {
+        var cnpj = ch.slice(6, 20);
+        var cUF = ch.slice(0, 2);
+        var ano = '20' + ch.slice(2, 4);
+        var mes = ch.slice(4, 6);
+
+        setStatus('Obtendo dados do fornecedor…');
+        var fornecedor = fmtCNPJ(cnpj);
+        var cidade = '';
+        var uf = UF[parseInt(cUF, 10)] || '';
+
+        try {
+          var r = await fetch('https://brasilapi.com.br/api/cnpj/v1/' + cnpj);
+          if (r.ok) {
+            var d = await r.json();
+            fornecedor = d.razao_social || d.nome_fantasia || fornecedor;
+            cidade = d.municipio || '';
+            if (d.uf) uf = d.uf;
+          }
+        } catch (e) {
+          // BrasilAPI tambem falhou — usa CNPJ formatado como nome
+        }
+
+        redirecionarComDados({
+          fornecedor: fornecedor,
+          cidade: cidade,
+          uf: uf,
+          data: ano + '-' + mes + '-01',
+          valor: 0,
+          itens: '',
+          link: link || '',
+          parcial: true
+        });
+      }
+
+      // ==================== Inicio ====================
       iniciar();
     </script>
   </body>
