@@ -77,5 +77,26 @@
       <p>O registro de livros estará disponível em breve.</p>
     </div>
   </div>
+
+  <!-- Badge de versão (troubleshooting) -->
+  <div id="version-badge" aria-hidden="true"></div>
+  <style>
+    #version-badge{position:fixed;right:6px;bottom:5px;z-index:2147483000;
+      font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#8a8f98;
+      opacity:.6;pointer-events:none;-webkit-user-select:none;user-select:none}
+  </style>
+  <script>
+    (function(){
+      var APP_VERSION = '__APP_VERSION__'; // substituído por sed no deploy
+      function versionLabel_(raw){
+        if(raw==null) return 'dev';
+        var s=String(raw).trim();
+        if(s===''||s.charAt(0)==='_') return 'dev';
+        return s.charAt(0).toLowerCase()==='v'?s:'v'+s;
+      }
+      var el=document.getElementById('version-badge');
+      if(el) el.textContent=versionLabel_(APP_VERSION);
+    })();
+  </script>
 </body>
 </html>
