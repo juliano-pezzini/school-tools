@@ -1011,6 +1011,86 @@ function buildAnnualPdfHtml_(report, generatedStamp) {
     + '</body></html>';
 }
 
+// ===========================================================================
+// NFe key parsing, validation & scan description builder
+// ===========================================================================
+
+var UF_CODES = {
+  11:'RO',12:'AC',13:'AM',14:'RR',15:'PA',16:'AP',17:'TO',21:'MA',22:'PI',23:'CE',
+  24:'RN',25:'PB',26:'PE',27:'AL',28:'SE',29:'BA',31:'MG',32:'ES',33:'RJ',35:'SP',
+  41:'PR',42:'SC',43:'RS',50:'MS',51:'MT',52:'GO',53:'DF'
+};
+
+/**
+ * Decodes a 44-digit NFe access key into its components.
+ * Throws if input is not exactly 44 digits.
+ */
+function parseChaveNFe_(chave) {
+  if (typeof chave !== 'string' || !/^\d{44}$/.test(chave)) {
+    throw new Error('Chave NFe deve conter exatamente 44 dígitos numéricos.');
+  }
+  var cUF = parseInt(chave.substring(0, 2), 10);
+  return {
+    cUF: cUF,
+    uf: UF_CODES[cUF] || '',
+    ano: parseInt(chave.substring(2, 4), 10),
+    mes: parseInt(chave.substring(4, 6), 10),
+    cnpj: chave.substring(6, 20),
+    modelo: parseInt(chave.substring(20, 22), 10),
+    serie: parseInt(chave.substring(22, 25), 10),
+    numero: parseInt(chave.substring(25, 34), 10),
+    cDV: parseInt(chave.substring(43, 44), 10)
+  };
+}
+
+/**
+ * Returns true if the key is exactly 44 digits AND the cDV mod-11 check passes.
+ * Never throws.
+ */
+function chaveValida_(chave) {
+  try {
+    if (typeof chave !== 'string' || !/^\d{44}$/.test(chave)) return false;
+    var ch43 = chave.substring(0, 43);
+    var pesos = [2, 3, 4, 5, 6, 7, 8, 9];
+    var soma = 0;
+    var p = 0;
+    for (var i = ch43.length - 1; i >= 0; i--) {
+      soma += parseInt(ch43.charAt(i), 10) * pesos[p % 8];
+      p++;
+    }
+    var dv = 11 - (soma % 11);
+    var expected = dv >= 10 ? 0 : dv;
+    return expected === parseInt(chave.charAt(43), 10);
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Builds scan description: FORNECEDOR (Cidade/UF) — itens
+ * Truncated to DESCRICAO_MAX chars with '…'.
+ */
+function buildScanDescription_(data) {
+  var fornecedor = (data && data.fornecedor || '').trim();
+  if (!fornecedor) return '';
+
+  var cidade = (data.cidade || '').trim();
+  var uf = (data.uf || '').trim();
+  var itens = (data.itens || '').trim();
+
+  var result = fornecedor;
+  if (cidade || uf) {
+    result += ' (' + (cidade && uf ? cidade + '/' + uf : cidade || uf) + ')';
+  }
+  if (itens) {
+    result += ' \u2014 ' + itens;
+  }
+  if (result.length > DESCRICAO_MAX) {
+    result = result.substring(0, DESCRICAO_MAX - 1) + '\u2026';
+  }
+  return result;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     formatBRL_: formatBRL_,
@@ -1048,6 +1128,10 @@ if (typeof module !== 'undefined' && module.exports) {
     buildSvgBars_: buildSvgBars_,
     buildMonthlyPdfHtml_: buildMonthlyPdfHtml_,
     buildAnnualPdfHtml_: buildAnnualPdfHtml_,
-    MONTH_NAMES_REL: MONTH_NAMES_REL
+    MONTH_NAMES_REL: MONTH_NAMES_REL,
+    UF_CODES: UF_CODES,
+    parseChaveNFe_: parseChaveNFe_,
+    chaveValida_: chaveValida_,
+    buildScanDescription_: buildScanDescription_
   };
 }
