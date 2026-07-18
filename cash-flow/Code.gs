@@ -73,7 +73,13 @@ function nowStamp_() {
  * dos spikes (título + viewport) e libera o embed (XFrameOptionsMode.ALLOWALL).
  */
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
+  var tpl = HtmlService.createTemplateFromFile('Index');
+  // URL pública /exec do Web App. Necessária porque, dentro do iframe do
+  // HtmlService, `window.location.href` aponta para o sandbox
+  // (googleusercontent.com/userCodeAppPanel) e NÃO para o /exec real — usar
+  // aquele como return do scanner leva a uma página em branco após o scan.
+  tpl.EXEC_URL = ScriptApp.getService().getUrl() || '';
+  return tpl.evaluate()
     .setTitle('Fluxo de Caixa — APP')
     .setFaviconUrl('https://cdn.jsdelivr.net/gh/juliano-pezzini/school-tools@main/cash-flow/favicon.png')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')

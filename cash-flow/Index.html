@@ -1395,9 +1395,13 @@
 
       // ===== NFe Scanner =====
       var SCANNER_URL = 'https://juliano-pezzini.github.io/school-tools/scanner/';
+      // URL /exec real injetada pelo servidor. Dentro do iframe do HtmlService,
+      // window.location.href aponta para o sandbox (userCodeAppPanel), que abre
+      // em branco se usado como return do scanner. Fallback para location.href.
+      var EXEC_URL = '<?= EXEC_URL ?>';
 
       function openScanner(){
-        var returnUrl = window.location.href.split('?')[0];
+        var returnUrl = (EXEC_URL || window.location.href).split('?')[0];
         var url = SCANNER_URL + '?mode=nfe&return=' + encodeURIComponent(returnUrl);
         window.open(url, '_blank');
       }
