@@ -79,6 +79,36 @@ jobs:
             echo "portal=${{ steps.filter.outputs.portal }}" >> "$GITHUB_OUTPUT"
           fi
 
+  version:
+    needs: [detect-changes]
+    if: >-
+      needs.detect-changes.outputs.cash-flow == 'true' ||
+      needs.detect-changes.outputs.book-registration == 'true' ||
+      needs.detect-changes.outputs.comp-time == 'true' ||
+      needs.detect-changes.outputs.portal == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      # New semver when meaningful commits exist; otherwise keep the current tag.
+      version: ${{ steps.tag.outputs.new_version || steps.tag.outputs.previous_version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Compute semver and create tag
+        id: tag
+        uses: mathieudutour/github-tag-action@a22cf08638b34d5badda920f9daf6e72c477b07b # v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # No implicit bump: only feat/fix/BREAKING create a new tag; trivial
+          # deploys (docs/chore) keep the previous version (VER-07).
+          default_bump: false
+      - name: Summary
+        run: |
+          echo "### version" >> "$GITHUB_STEP_SUMMARY"
+          echo "computed: ${{ steps.tag.outputs.new_version || steps.tag.outputs.previous_version || 'dev' }}" >> "$GITHUB_STEP_SUMMARY"
+
   test-cash-flow:
     needs: [detect-changes]
     if: needs.detect-changes.outputs.cash-flow == 'true'
@@ -95,7 +125,7 @@ jobs:
       - run: npm test
 
   deploy-cash-flow:
-    needs: [detect-changes, test-cash-flow]
+    needs: [detect-changes, test-cash-flow, version]
     if: >-
       !failure() &&
       needs.detect-changes.outputs.cash-flow == 'true'
@@ -124,6 +154,14 @@ jobs:
             "scriptExtensions": [".js", ".gs"]
           }
           EOF
+      - name: Inject app version
+        working-directory: cash-flow
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          if [ -n "$VERSION" ]; then
+            sed -i "s|var APP_VERSION = '__APP_VERSION__'|var APP_VERSION = '${VERSION}'|" Index.html
+          fi
       - name: Push to Apps Script
         working-directory: cash-flow
         run: clasp push --force
@@ -148,7 +186,7 @@ jobs:
           fi
 
   deploy-book-registration:
-    needs: [detect-changes]
+    needs: [detect-changes, version]
     if: needs.detect-changes.outputs.book-registration == 'true'
     runs-on: ubuntu-latest
     outputs:
@@ -174,6 +212,14 @@ jobs:
             "rootDir": ""
           }
           EOF
+      - name: Inject app version
+        working-directory: book-registration
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          if [ -n "$VERSION" ]; then
+            sed -i "s|var APP_VERSION = '__APP_VERSION__'|var APP_VERSION = '${VERSION}'|" Index.html
+          fi
       - name: Push to Apps Script
         working-directory: book-registration
         run: clasp push --force
@@ -198,7 +244,7 @@ jobs:
           fi
 
   deploy-comp-time:
-    needs: [detect-changes]
+    needs: [detect-changes, version]
     if: needs.detect-changes.outputs.comp-time == 'true'
     runs-on: ubuntu-latest
     outputs:
@@ -224,6 +270,14 @@ jobs:
             "rootDir": ""
           }
           EOF
+      - name: Inject app version
+        working-directory: comp-time
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          if [ -n "$VERSION" ]; then
+            sed -i "s|var APP_VERSION = '__APP_VERSION__'|var APP_VERSION = '${VERSION}'|" Index.html
+          fi
       - name: Push to Apps Script
         working-directory: comp-time
         run: clasp push --force
@@ -250,6 +304,7 @@ jobs:
   deploy-portal:
     needs:
       - detect-changes
+      - version
       - deploy-cash-flow
       - deploy-book-registration
       - deploy-comp-time
@@ -280,6 +335,7 @@ jobs:
           URL_COMP_TIME: ${{ needs.deploy-comp-time.outputs.webapp-url || vars.WEBAPP_URL_COMP_TIME }}
           URL_BOOK_REGISTRATION: ${{ needs.deploy-book-registration.outputs.webapp-url || vars.WEBAPP_URL_BOOK_REGISTRATION }}
           ALLOWED_EMAILS: ${{ vars.PORTAL_ALLOWED_EMAILS }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           if [ -n "$URL_CASH_FLOW" ]; then
             sed -i "s|REPLACE_WITH_CASHFLOW_WEBAPP_URL|${URL_CASH_FLOW}|g" Index.html
@@ -289,6 +345,9 @@ jobs:
           fi
           if [ -n "$URL_BOOK_REGISTRATION" ]; then
             sed -i "s|REPLACE_WITH_LIBRARY_WEBAPP_URL|${URL_BOOK_REGISTRATION}|g" Index.html
+          fi
+          if [ -n "$VERSION" ]; then
+            sed -i "s|var APP_VERSION = '__APP_VERSION__'|var APP_VERSION = '${VERSION}'|" Index.html
           fi
           sed -i "s|REPLACE_WITH_ALLOWED_EMAILS|${ALLOWED_EMAILS}|g" Code.gs
       - name: Create clasp project config
