@@ -62,6 +62,15 @@
       e insights. Link público abre sem login.
   19. Chamar `getMonthlyReport`/`getAnnualReport`/`exportReportPdf` sem papel
       admin/tesoureiro → "Acesso negado".
+  ---- Captura NFe/NFC-e (M1) ----
+  20. Botão "Escanear nota" visível para admin/tesoureiro; oculto para outros papéis.
+  21. Escanear NFe real do mês → form pre-filled (tipo=saida, valor, data,
+      fornecedor+itens na descrição).
+  22. Escanear NFC-e (QR de cupom fiscal SC) → form pre-filled com os mesmos campos.
+  23. Nota antiga ou rede offline → fallback parcial (fornecedor+data, sem valor);
+      banner "Dados parciais" exibido.
+  24. Código inválido (cDV errado) → rejeitado no scanner com "Código inválido".
+  25. Cancelar/fechar scanner → form inalterado.
   ===========================================================================
 -->
 <html lang="pt-BR">
