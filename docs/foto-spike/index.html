@@ -44,6 +44,9 @@
       ul { margin: 6px 0; padding-left: 18px; }
       li { font-size: .85rem; color: var(--muted); }
       .hint { font-size: .82rem; color: var(--muted); margin-top: 8px; }
+      video#camPreview { display: none; width: 100%; border-radius: 10px; margin-top: 12px; background: #000; }
+      #camControls { display: none; margin-top: 8px; }
+      #camControls .row { gap: 8px; }
     </style>
   </head>
   <body>
@@ -55,12 +58,19 @@
     </p>
 
     <div class="card">
-      <input type="file" accept="image/*" capture="environment" id="fInput" style="display:none" />
       <input type="file" accept="image/*" id="fInputGaleria" style="display:none" />
       <div class="row">
-        <button onclick="document.getElementById('fInput').click()">📷 Fotografar código</button>
+        <button id="btnCam" onclick="abrirCamera()">📷 Fotografar código</button>
         <button class="sec" onclick="document.getElementById('fInputGaleria').click()">🖼️ Escolher da galeria</button>
       </div>
+      <video id="camPreview" playsinline muted autoplay></video>
+      <div id="camControls">
+        <div class="row">
+          <button onclick="capturarFoto()">📸 Capturar</button>
+          <button class="sec" onclick="fecharCamera()">✕ Cancelar</button>
+        </div>
+      </div>
+      <canvas id="snapCanvas" style="display:none"></canvas>
       <img id="foto" alt="" />
       <div class="status muted" id="status">
         Fotografe a NFe (código de barras) ou o cupom NFC-e (QR). Dica: enquadre
@@ -107,12 +117,56 @@
     <script>
       var FORMATOS = ['qr_code', 'code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'itf'];
       var placar = { total: 0, bd: 0, zx: 0, any: 0, chave: 0 };
+      var camStream = null;
 
       function el(id) { return document.getElementById(id); }
       function setStatus(msg, cls) {
         var s = el('status');
         s.innerHTML = msg;
         s.className = 'status ' + (cls || 'muted');
+      }
+
+      // ---- Camera (getUserMedia) ----
+      async function abrirCamera() {
+        if (camStream) { fecharCamera(); return; }
+        setStatus('Abrindo câmera…', 'muted');
+        try {
+          camStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+          });
+          var v = el('camPreview');
+          v.srcObject = camStream;
+          v.style.display = 'block';
+          el('camControls').style.display = 'block';
+          el('btnCam').textContent = '📷 Câmera aberta…';
+          el('btnCam').disabled = true;
+          setStatus('Enquadre o código e clique em <b>Capturar</b>.', 'muted');
+        } catch (e) {
+          setStatus('Erro ao abrir câmera: ' + (e.message || e), 'err');
+        }
+      }
+      function capturarFoto() {
+        var v = el('camPreview');
+        var c = el('snapCanvas');
+        c.width = v.videoWidth;
+        c.height = v.videoHeight;
+        c.getContext('2d').drawImage(v, 0, 0);
+        fecharCamera();
+        c.toBlob(function (blob) {
+          if (!blob) { setStatus('Falha ao capturar a foto.', 'err'); return; }
+          var file = new File([blob], 'captura.jpg', { type: 'image/jpeg' });
+          processar(file);
+        }, 'image/jpeg', 0.92);
+      }
+      function fecharCamera() {
+        if (camStream) {
+          camStream.getTracks().forEach(function (t) { t.stop(); });
+          camStream = null;
+        }
+        el('camPreview').style.display = 'none';
+        el('camControls').style.display = 'none';
+        el('btnCam').textContent = '📷 Fotografar código';
+        el('btnCam').disabled = false;
       }
 
       // ---- Extração + validação da chave NFe (espelho do scanner) ----
@@ -285,7 +339,6 @@
         el('scoreLine').className = 'big';
       }
 
-      el('fInput').addEventListener('change', function (e) { processar(e.target.files && e.target.files[0]); });
       el('fInputGaleria').addEventListener('change', function (e) { processar(e.target.files && e.target.files[0]); });
 
       // ---- Diagnóstico ----
