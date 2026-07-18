@@ -48,6 +48,10 @@
       }
       button.sec { background: #e0e0e0; color: #1a1a1a; }
       button:active { opacity: 0.85; }
+      .zoom { display: none; align-items: center; gap: 10px; margin-top: 8px; }
+      .zoom button { width: 48px; margin: 0; font-size: 1.3rem; padding: 8px 0; }
+      .zoom .val { font-weight: 700; min-width: 52px; text-align: center; }
+      .hint2 { font-size: 0.8rem; color: #888; margin: 6px 0 0; }
     </style>
   </head>
   <body>
@@ -55,6 +59,12 @@
 
     <video id="video" playsinline muted autoplay></video>
     <div class="status" id="status">Iniciando camera…</div>
+    <div class="zoom" id="zoom">
+      <button id="zoomMenos" type="button">−</button>
+      <span class="val" id="zoomVal">1.0×</span>
+      <button id="zoomMais" type="button">+</button>
+    </div>
+    <p class="hint2">QR pequeno: aumente o zoom. Codigo de barras largo da NFe: deixe no 1× e aproxime ate preencher a largura.</p>
     <button id="lanterna" class="sec" hidden>Lanterna</button>
     <p id="dica" style="font-size: 0.85rem; color: #666; margin: 8px 0 0;">
       Segure firme a ~15–25 cm do codigo, com boa luz. Deixe o codigo preencher a largura da tela e espere a imagem ficar nitida.
@@ -88,6 +98,8 @@
       var parado = false;
       var stream = null;
       var track = null;
+      var focoTimer = null;
+      var zoomAtual = 1, zoomCaps = null;
 
       // Confirmacao anti-erro: so aceita um codigo apos 2 leituras IGUAIS seguidas.
       var ultimo = null, repeticoes = 0;
@@ -111,6 +123,11 @@
         await video.play();
         track = stream.getVideoTracks()[0];
         ajustarCamera();
+        prepararZoom();
+        // Reaplica foco continuo durante TODA a sessao de leitura — alguns Samsung
+        // perdem o lock de autofoco e precisam ser "cutucados" de novo.
+        if (focoTimer) clearInterval(focoTimer);
+        focoTimer = setInterval(ajustarCamera, 1200);
         var tentativas = 0;
         var t = setInterval(function () {
           tentativas++;
@@ -131,6 +148,40 @@
           track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(function () {});
         }
         if (caps.torch) prepararLanterna();
+      }
+
+      // Zoom: muitos Android expoem `zoom` nas capabilities do track.
+      function prepararZoom() {
+        if (!track || !track.getCapabilities) return;
+        var caps = track.getCapabilities();
+        if (!caps.zoom) return; // sem zoom optico/digital exposto
+        zoomCaps = caps.zoom; // {min, max, step}
+        document.getElementById('zoom').style.display = 'flex';
+        // comeca em 1x (ou no minimo, se o minimo for > 1)
+        aplicarZoom(Math.max(1, zoomCaps.min));
+      }
+      function aplicarZoom(z) {
+        if (!track || !zoomCaps) return;
+        z = Math.min(zoomCaps.max, Math.max(zoomCaps.min, z));
+        zoomAtual = z;
+        track.applyConstraints({ advanced: [{ zoom: z }] }).catch(function () {});
+        document.getElementById('zoomVal').textContent = z.toFixed(1) + '×';
+      }
+      function passoZoom() { return zoomCaps && zoomCaps.step ? Math.max(zoomCaps.step, 0.5) : 0.5; }
+
+      // Toque na imagem reforca o foco (foco unico e volta ao continuo).
+      function focarNoToque() {
+        if (!track || !track.getCapabilities) return;
+        var caps = track.getCapabilities();
+        if (!caps.focusMode) return;
+        var seq = [];
+        if (caps.focusMode.indexOf('single-shot') >= 0) seq.push('single-shot');
+        if (caps.focusMode.indexOf('continuous') >= 0) seq.push('continuous');
+        if (!seq.length) return;
+        track.applyConstraints({ advanced: [{ focusMode: seq[0] }] }).catch(function () {});
+        if (seq[1]) setTimeout(function () {
+          track.applyConstraints({ advanced: [{ focusMode: seq[1] }] }).catch(function () {});
+        }, 800);
       }
 
       var torchOn = false;
@@ -159,10 +210,13 @@
       }
 
       function pararCamera() {
+        if (focoTimer) { clearInterval(focoTimer); focoTimer = null; }
         try { if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
         stream = null;
         track = null;
         esconderLanterna();
+        document.getElementById('zoom').style.display = 'none';
+        zoomCaps = null;
       }
 
       // ==================== Leitura (BarcodeDetector + ZXing) ====================
@@ -558,6 +612,11 @@
           parcial: true
         });
       }
+
+      // ==================== Eventos de camera ====================
+      document.getElementById('zoomMais').onclick = function () { aplicarZoom(zoomAtual + passoZoom()); };
+      document.getElementById('zoomMenos').onclick = function () { aplicarZoom(zoomAtual - passoZoom()); };
+      video.addEventListener('click', focarNoToque);
 
       // ==================== Inicio ====================
       iniciar();
