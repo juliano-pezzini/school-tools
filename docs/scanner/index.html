@@ -409,17 +409,26 @@
       }
 
       // --- NFC-e modelo 65: client-side SEFAZ fetch ---
+      // QR code contains a URL like https://sat.sef.sc.gov.br/nfce/consulta?p=CHAVE|2|1|...
+      // For SC (cUF=42) we attempt to fetch and parse the SEFAZ page directly.
+      // Other states go straight to fallback (different HTML structures, Cloudflare, etc).
       async function processarNFCe(ch, cUF, sefazUrl) {
-        // Apenas SC (cUF=42) tenta parse client-side
         if (cUF !== '42' || !sefazUrl) {
           fallbackBrasilAPI(ch, sefazUrl);
           return;
         }
-        setStatus('Consultando SEFAZ…');
+        setStatus('Consultando SEFAZ-SC…');
         try {
-          var r = await fetch(sefazUrl, { mode: 'cors' });
+          var controller = new AbortController();
+          var timer = setTimeout(function () { controller.abort(); }, 10000);
+          var r = await fetch(sefazUrl, { mode: 'cors', signal: controller.signal });
+          clearTimeout(timer);
           if (!r.ok) throw new Error('HTTP ' + r.status);
           var html = await r.text();
+          // Cloudflare challenge detection: page has no fiscal data
+          if (html.length < 500 || /challenge-platform|cf-browser-verification/i.test(html)) {
+            throw new Error('Cloudflare challenge');
+          }
           var parsed = parseSefazHtml(html);
           if (!parsed) throw new Error('Parse falhou');
 
@@ -437,66 +446,74 @@
             parcial: false
           });
         } catch (e) {
+          // Fetch failed (Cloudflare, timeout, CORS, network) — fallback with link
           fallbackBrasilAPI(ch, sefazUrl);
         }
       }
 
       // --- Parse SEFAZ-SC HTML (best-effort) ---
+      // The SEFAZ-SC NFC-e page structure varies, so we try multiple selectors
+      // and patterns. If we can't extract at least supplier OR total value, we
+      // return null to trigger the fallback path.
       function parseSefazHtml(html) {
         try {
           var doc = new DOMParser().parseFromString(html, 'text/html');
 
-          // Fornecedor
+          // Fornecedor: common selectors on SEFAZ-SC NFC-e page
           var fornecedor = '';
-          var emitEl = doc.querySelector('.txtTit2, .NFCDetalhe_Emitente, #u20');
+          var emitEl = doc.querySelector('.txtTit2, .NFCDetalhe_Emitente, #u20, .emit .xNome');
           if (emitEl) fornecedor = emitEl.textContent.trim();
           if (!fornecedor) {
-            var spans = doc.querySelectorAll('div, span');
-            for (var i = 0; i < spans.length; i++) {
-              var t = spans[i].textContent.trim();
-              if (t.length > 5 && t.length < 100 && /CNPJ/.test((spans[i].parentElement && spans[i].parentElement.textContent) || '')) {
+            // Fallback: look for element near CNPJ mention
+            var allEls = doc.querySelectorAll('div, span, td');
+            for (var i = 0; i < allEls.length; i++) {
+              var parent = allEls[i].parentElement;
+              var ctx = parent ? parent.textContent : '';
+              var t = allEls[i].textContent.trim();
+              if (t.length > 5 && t.length < 100 && /CNPJ/.test(ctx)) {
                 fornecedor = t;
                 break;
               }
             }
           }
 
-          // Valor total
+          // Valor total: try known selectors, then regex
           var valor = 0;
-          var totalEl = doc.querySelector('.txtMax, .totalNumb, #linhaTotal .txtTit');
+          var totalEl = doc.querySelector('.txtMax, .totalNumb, #linhaTotal .txtTit, .total .valor');
           if (totalEl) {
             var vt = totalEl.textContent.replace(/[^\d,.]/g, '').replace(/\./g, '').replace(',', '.');
             valor = parseFloat(vt) || 0;
           }
           if (!valor) {
-            var allText = doc.body.innerHTML;
-            var mTotal = allText.match(/[Vv]alor\s*[Tt]otal[^<]*?R?\$?\s*([\d.,]+)/);
+            var bodyHtml = doc.body ? doc.body.innerHTML : html;
+            var mTotal = bodyHtml.match(/[Vv]alor\s*[Tt]otal[^<]*?R?\$?\s*([\d.,]+)/);
             if (mTotal) {
               var vn = mTotal[1].replace(/\./g, '').replace(',', '.');
               valor = parseFloat(vn) || 0;
             }
           }
 
-          // Data emissao
+          // Data emissao (DD/MM/YYYY → YYYY-MM-DD)
           var data = '';
-          var mData = doc.body.textContent.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+          var bodyText = doc.body ? doc.body.textContent : '';
+          var mData = bodyText.match(/(\d{2})\/(\d{2})\/(\d{4})/);
           if (mData) data = mData[3] + '-' + mData[2] + '-' + mData[1];
 
-          // Itens
+          // Itens: try table rows and known item selectors
           var itens = '';
-          var rows = doc.querySelectorAll('.txtTit, .NFCDetalhe_Item, tr');
+          var itemEls = doc.querySelectorAll('.txtTit, .NFCDetalhe_Item, .det .prod, tr.item, #tabResult tr');
           var itensArr = [];
-          for (var j = 0; j < rows.length && itensArr.length < 30; j++) {
-            var rt = rows[j].textContent.trim();
-            if (rt.length > 3 && rt.length < 120 && /\d/.test(rt) && !/Total|CNPJ|Chave/.test(rt)) {
+          for (var j = 0; j < itemEls.length && itensArr.length < 30; j++) {
+            var rt = itemEls[j].textContent.trim();
+            if (rt.length > 3 && rt.length < 120 && /\d/.test(rt) && !/Total|CNPJ|Chave|Emiss/i.test(rt)) {
               itensArr.push(rt.replace(/\s+/g, ' '));
             }
           }
           if (itensArr.length > 0) itens = itensArr.slice(0, 20).join('; ');
 
-          // Cidade
+          // Cidade: look for "City - SC" or "City/SC" pattern
           var cidade = '';
-          var mCidade = doc.body.textContent.match(/([A-Z\u00C0-\u00FF][a-z\u00E0-\u00FF]+(?:\s+[A-Z\u00C0-\u00FF][a-z\u00E0-\u00FF]+)*)\s*[-\/]\s*SC/);
+          var mCidade = bodyText.match(/([A-Z\u00C0-\u00FF][a-z\u00E0-\u00FF]+(?:\s+[A-Z\u00C0-\u00FF][a-z\u00E0-\u00FF]+)*)\s*[-\/]\s*SC/);
           if (mCidade) cidade = mCidade[1];
 
           if (!fornecedor && !valor) return null;
