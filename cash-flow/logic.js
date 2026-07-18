@@ -1091,6 +1091,25 @@ function buildScanDescription_(data) {
   return result;
 }
 
+// ===========================================================================
+// Versão exibida no badge (troubleshooting)
+// ===========================================================================
+
+/**
+ * Rótulo de versão exibido no badge de cada app. Recebe o valor bruto injetado
+ * no deploy (`APP_VERSION`) ou a tag buscada em runtime.
+ * - Vazio/nulo ou placeholder não substituído (começa com `_`) → `'dev'`.
+ * - Semver sem prefixo (`1.2.0`) → prefixa `v` → `'v1.2.0'`.
+ * - Já prefixado (`v1.2.0`) → mantém (idempotente).
+ * Pura: determinística, sem I/O. Espelhada inline em cada `Index.html`.
+ */
+function versionLabel_(raw) {
+  if (raw == null) return 'dev';
+  var s = String(raw).trim();
+  if (s === '' || s.charAt(0) === '_') return 'dev';
+  return s.charAt(0).toLowerCase() === 'v' ? s : 'v' + s;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     formatBRL_: formatBRL_,
@@ -1132,6 +1151,7 @@ if (typeof module !== 'undefined' && module.exports) {
     UF_CODES: UF_CODES,
     parseChaveNFe_: parseChaveNFe_,
     chaveValida_: chaveValida_,
-    buildScanDescription_: buildScanDescription_
+    buildScanDescription_: buildScanDescription_,
+    versionLabel_: versionLabel_
   };
 }
