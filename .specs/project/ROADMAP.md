@@ -1,7 +1,7 @@
 # Roadmap
 
 **Current Milestone:** M1 — Fluxo de Caixa da APP (MVP)
-**Status:** In Progress (4/5 features done)
+**Status:** ✅ COMPLETE (5/5 features done — pending deploy smoke)
 
 ---
 
@@ -77,9 +77,10 @@
 - ✅ Implementado e verificado (PASS). +49 testes (172 total). Spec: `.specs/features/relatorios/`.
 - Relatório mensal (totais + lista com comprovantes, provisório/oficial) e anual (KPIs, categorias, Chart.js, insights). PDF público no Drive (B-006), um por período (substitui ao regerar), auditado.
 
-**Captura por NFe/NFC-e** - PLANNED
+**Captura por NFe/NFC-e** - COMPLETE
 
-- Escanear QR/código de barras para preencher despesas automaticamente (depende do Spike NFe/NFC-e).
+- ✅ Implementado e verificado (PASS). +16 testes (188 total). Spec: `.specs/features/captura-nfe/`.
+- Escanear Code-128 (NFe) ou QR (NFC-e) → extração automática via proxy consultadanfe (NFe) ou fetch client-side SEFAZ-SC (NFC-e) → pré-preenche lançamento (tipo=saída, valor, data, fornecedor+itens). Degradação graciosa (fallback key decode + BrasilAPI). Scanner em GitHub Pages (AD-008).
 
 ---
 

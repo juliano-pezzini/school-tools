@@ -1,7 +1,16 @@
 # State
 
 **Last Updated:** 2026-07-17
-**Current Work:** **M1 — feature Relatórios**: ✅ **implementada e verificada** (PASS; `.specs/features/relatorios/validation.md`). Relatório **mensal** (totais + lista de lançamentos com links de comprovante, badge provisório/oficial) e **anual** (KPIs, quebra por categoria, Chart.js na tela, SVG no PDF, insights) na tela + **exportação PDF público** no Drive (`ANYONE_WITH_LINK`) para transparência (B-006). Um PDF por período (regerar substitui o anterior); auditoria da publicação; guard `requireRole_` server-side. 6 commits atômicos (T1–T5 + fix de sensor); suite **172 testes** (49 novos em `relatorio.test.js`). **Pendente:** deploy smoke manual (passos 15–19 no cabeçalho de `cash-flow/Index.html`). Features **Comprovantes** e **Lançamentos & Saldo** concluídas e verificadas (PASS). **Papéis** (admin/tesoureiro/leitor) embutidos desde a arquitetura base (guard `requireRole_` em todos os endpoints, aba `Usuarios`, bootstrap anti-lockout). M1 restante: **Captura por NFe/NFC-e** (PLANNED). Em paralelo, B-002 (Robô da Biblioteca/MSTECH) aguarda infos da bibliotecária. M0 técnico fechado para a stack A.
+**Current Work:** **M1 — Fluxo de Caixa MVP: ✅ COMPLETO (5/5 features).** Todas as features implementadas e verificadas (PASS):
+- **Lançamentos & Saldo** (107 testes) — entrada/saída, saldo, abertura, edição/exclusão soft-delete, fechamento mensal, categoria autocomplete, idempotência, auditoria.
+- **Comprovantes** (+16 testes) — foto/PDF por lançamento, link público (AD-011), substituir/remover, soft-delete cascata.
+- **Papéis** (built-in) — guard `requireRole_` em todos os endpoints (admin/tesoureiro/leitor), `Usuarios`, anti-lockout.
+- **Relatórios** (+49 testes) — mensal (totais + comprovantes + provisório/oficial) e anual (KPIs, Chart.js, insights). PDF público no Drive (B-006).
+- **Captura por NFe/NFC-e** (+16 testes, **188 total**) — escanear Code-128 (NFe) ou QR (NFC-e), extração automática (proxy consultadanfe / client-side SEFAZ-SC), pré-preenche lançamento (valor/data/fornecedor/itens). Degradação graciosa. Scanner em GitHub Pages (AD-008).
+
+**Pendente:** deploy smoke manual (passos 1–25 no cabeçalho de `cash-flow/Index.html`) + publicar scanner no GitHub Pages.
+**Próximo:** M2 (Banco de Horas) ou deploy+smoke do M1.
+Em paralelo, B-002 (Robô da Biblioteca/MSTECH) aguarda infos da bibliotecária. M0 técnico fechado para a stack A.
 
 ---
 
