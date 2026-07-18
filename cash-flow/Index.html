@@ -275,7 +275,11 @@
 
     <!-- ===== Lançamento (criar/editar) ===== -->
     <div class="card">
-      <h2 id="lancTitulo">Novo lançamento</h2>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <h2 id="lancTitulo" style="margin:0;">Novo lançamento</h2>
+        <button id="btnScanNfe" class="ghost" style="font-size:.85rem;padding:5px 10px;" onclick="openScanner()">📷 Escanear nota</button>
+      </div>
+      <div id="scanBanner" class="hidden" style="margin-top:8px;"></div>
       <div class="row">
         <div style="min-width:130px;">
           <label for="lTipo">Tipo</label>
@@ -912,6 +916,8 @@
         el('lTipo').value = 'entrada';
         resetComprovanteField_();
         show('lCancelar', false);
+        el('scanBanner').innerHTML = '';
+        show('scanBanner', false);
       }
       function afterWrite(){ refreshAll(); }
 
@@ -1378,10 +1384,60 @@
         el('relAno').value = y;
       })();
 
+      // ===== NFe Scanner =====
+      var SCANNER_URL = 'https://juliano-pezzini.github.io/school-tools/scanner/';
+
+      function openScanner(){
+        var returnUrl = window.location.href.split('?')[0];
+        var url = SCANNER_URL + '?mode=nfe&return=' + encodeURIComponent(returnUrl);
+        window.open(url, '_blank');
+      }
+
+      function prefillFromScan(data){
+        el('lTipo').value = 'saida';
+        if (data.data) {
+          el('lData').value = data.data;
+        }
+        if (data.valor && !data.parcial) {
+          el('lValor').value = String(data.valor).replace('.', ',');
+        }
+        var desc = (data.fornecedor || '') +
+          (data.cidade && data.uf ? ' (' + data.cidade + '/' + data.uf + ')' : '') +
+          (data.itens ? ' — ' + data.itens : '');
+        el('lDescricao').value = desc.slice(0, 280);
+
+        var banner = '';
+        if (data.parcial) {
+          banner += '<div class="warn">⚠️ Dados parciais — complete o valor e os itens manualmente.</div>';
+        }
+        if (data.link) {
+          banner += '<div style="margin-top:6px;"><a href="' + esc(data.link) + '" target="_blank" rel="noopener">Ver nota na SEFAZ</a></div>';
+        }
+        el('scanBanner').innerHTML = banner;
+        show('scanBanner', !!banner);
+      }
+
       // ===== bootstrap =====
       resetLancamentoForm();
       initMonth();
       refreshAll();
+
+      // Check for scanData after bootstrap (so resetLancamentoForm doesn't overwrite)
+      (function checkScanData(){
+        var params = new URLSearchParams(window.location.search);
+        var raw = params.get('scanData');
+        if (!raw) return;
+        try {
+          var b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+          var data = JSON.parse(atob(b64));
+          prefillFromScan(data);
+        } catch(e) {
+          box('lResult', '❌ Não foi possível ler os dados da nota escaneada.', 'err');
+        }
+        // Clear scanData from URL to avoid re-trigger on refresh
+        var cleanUrl = window.location.href.split('?')[0];
+        history.replaceState(null, '', cleanUrl);
+      })();
     </script>
   </div><!-- /.page-body -->
   </body>
