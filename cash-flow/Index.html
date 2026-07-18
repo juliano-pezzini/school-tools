@@ -1437,8 +1437,9 @@
 
       // Check for scanData after bootstrap (so resetLancamentoForm doesn't overwrite)
       (function checkScanData(){
-        var params = new URLSearchParams(window.location.search);
-        var raw = params.get('scanData');
+        // Injetado pelo servidor (doGet). Dentro do iframe do HtmlService o JS
+        // não enxerga a query string do /exec, então NÃO usamos window.location.
+        var raw = '<?= SCAN_DATA ?>';
         if (!raw) return;
         try {
           var b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
@@ -1447,9 +1448,6 @@
         } catch(e) {
           box('lResult', '❌ Não foi possível ler os dados da nota escaneada.', 'err');
         }
-        // Clear scanData from URL to avoid re-trigger on refresh
-        var cleanUrl = window.location.href.split('?')[0];
-        history.replaceState(null, '', cleanUrl);
       })();
     </script>
   </div><!-- /.page-body -->

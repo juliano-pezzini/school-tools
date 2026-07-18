@@ -72,13 +72,17 @@ function nowStamp_() {
  * de negócio são chamadas a partir dela via `google.script.run`. Mantém o padrão
  * dos spikes (título + viewport) e libera o embed (XFrameOptionsMode.ALLOWALL).
  */
-function doGet() {
+function doGet(e) {
   var tpl = HtmlService.createTemplateFromFile('Index');
   // URL pública /exec do Web App. Necessária porque, dentro do iframe do
   // HtmlService, `window.location.href` aponta para o sandbox
   // (googleusercontent.com/userCodeAppPanel) e NÃO para o /exec real — usar
   // aquele como return do scanner leva a uma página em branco após o scan.
   tpl.EXEC_URL = ScriptApp.getService().getUrl() || '';
+  // O scanner volta com `?scanData=<base64url>` no /exec. Dentro do iframe o
+  // JS não enxerga a query string do topo (só o servidor via e.parameter),
+  // então lemos aqui e injetamos no template para o cliente pré-preencher.
+  tpl.SCAN_DATA = (e && e.parameter && e.parameter.scanData) || '';
   return tpl.evaluate()
     .setTitle('Fluxo de Caixa — APP')
     .setFaviconUrl('https://cdn.jsdelivr.net/gh/juliano-pezzini/school-tools@main/cash-flow/favicon.png')
