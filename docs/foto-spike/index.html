@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Spike — Ler código da FOTO (BarcodeDetector + ZXing)</title>
+    <style>
+      :root { --ok: #1a7f37; --err: #b3261e; --warn: #8a5a00; --muted: #666; }
+      * { box-sizing: border-box; }
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        margin: 0; padding: 16px; max-width: 640px; margin-inline: auto;
+        color: #1a1a1a; background: #fafafa;
+      }
+      h1 { font-size: 1.25rem; margin: 0 0 4px; }
+      .sub { color: var(--muted); font-size: .9rem; margin: 0 0 16px; }
+      .card {
+        background: #fff; border: 1px solid #e3e3e3; border-radius: 12px;
+        padding: 14px; margin-bottom: 14px;
+      }
+      button {
+        font-size: 1rem; padding: 12px 16px; width: 100%;
+        border: 0; border-radius: 10px; background: #1558d6; color: #fff;
+        font-weight: 600; cursor: pointer;
+      }
+      button.sec { background: #eef1f6; color: #1a1a1a; }
+      button:active { opacity: .85; }
+      img#foto { display: none; width: 100%; border-radius: 10px; margin-top: 12px; }
+      .row { display: flex; gap: 10px; }
+      .row > * { flex: 1; }
+      .status { font-size: .9rem; margin-top: 10px; }
+      .ok { color: var(--ok); font-weight: 600; }
+      .err { color: var(--err); }
+      .warn { color: var(--warn); }
+      .muted { color: var(--muted); }
+      table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+      th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #eee; vertical-align: top; }
+      th { color: var(--muted); font-weight: 600; }
+      .big { font-size: 1.5rem; font-weight: 700; }
+      .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .78rem; font-weight: 600; }
+      .pill.ok { background: #e6f4ea; color: var(--ok); }
+      .pill.err { background: #fce8e6; color: var(--err); }
+      code { word-break: break-all; font-size: .82rem; }
+      ul { margin: 6px 0; padding-left: 18px; }
+      li { font-size: .85rem; color: var(--muted); }
+      .hint { font-size: .82rem; color: var(--muted); margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <h1>Spike — Ler código da FOTO</h1>
+    <p class="sub">
+      Mede se dá para decodificar o código de barras da NFe (Code-128) e o QR da
+      NFC-e a partir de uma <b>foto estática</b>, usando os dois motores
+      (BarcodeDetector nativo + ZXing). Revalida a decisão AD-008.
+    </p>
+
+    <div class="card">
+      <input type="file" accept="image/*" capture="environment" id="fInput" style="display:none" />
+      <input type="file" accept="image/*" id="fInputGaleria" style="display:none" />
+      <div class="row">
+        <button onclick="document.getElementById('fInput').click()">📷 Fotografar código</button>
+        <button class="sec" onclick="document.getElementById('fInputGaleria').click()">🖼️ Escolher da galeria</button>
+      </div>
+      <img id="foto" alt="" />
+      <div class="status muted" id="status">
+        Fotografe a NFe (código de barras) ou o cupom NFC-e (QR). Dica: enquadre
+        <b>só o código</b>, bem focado e preenchendo a largura.
+      </div>
+    </div>
+
+    <div class="card" id="resultCard" style="display:none">
+      <h2 style="font-size:1rem;margin:0 0 8px">Resultado desta foto</h2>
+      <table>
+        <tbody id="engineRows"></tbody>
+      </table>
+      <div id="chaveInfo" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:1rem;margin:0 0 8px">Placar da sessão</h2>
+      <div class="big" id="scoreLine">—</div>
+      <table style="margin-top:8px">
+        <tbody>
+          <tr><th>Fotos testadas</th><td id="sTotal">0</td></tr>
+          <tr><th>BarcodeDetector acertou</th><td id="sBD">0</td></tr>
+          <tr><th>ZXing acertou</th><td id="sZX">0</td></tr>
+          <tr><th>Algum motor acertou</th><td id="sAny">0</td></tr>
+          <tr><th>Chave NFe válida (cDV)</th><td id="sChave">0</td></tr>
+        </tbody>
+      </table>
+      <button class="sec" style="margin-top:10px" onclick="resetPlacar()">Zerar placar</button>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:1rem;margin:0 0 8px">Diagnóstico do dispositivo</h2>
+      <ul id="diag"></ul>
+    </div>
+
+    <p class="hint">
+      Como reportar: teste ~10 fotos de cada tipo (algumas de perto/só o código,
+      outras da nota inteira) e anote o <b>placar da sessão</b> + qual motor
+      acertou mais. Isso vira o dado que confirma ou derruba AD-008.
+    </p>
+
+    <!-- ZXing como 2º motor; BarcodeDetector nativo é o 1º quando existe. -->
+    <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+    <script>
+      var FORMATOS = ['qr_code', 'code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'itf'];
+      var placar = { total: 0, bd: 0, zx: 0, any: 0, chave: 0 };
+
+      function el(id) { return document.getElementById(id); }
+      function setStatus(msg, cls) {
+        var s = el('status');
+        s.innerHTML = msg;
+        s.className = 'status ' + (cls || 'muted');
+      }
+
+      // ---- Extração + validação da chave NFe (espelho do scanner) ----
+      function extrairChave(valor) {
+        if (!valor) return null;
+        var v = String(valor).trim();
+        var m = v.match(/[?&]p=([^|&]+)/i);
+        if (m) { var c = m[1].replace(/\D/g, ''); if (c.length >= 44) return c.slice(0, 44); }
+        var d = v.replace(/\D/g, '');
+        var m44 = d.match(/\d{44}/);
+        return m44 ? m44[0] : null;
+      }
+      function chaveValida(ch) {
+        if (!/^\d{44}$/.test(ch)) return false;
+        var ch43 = ch.slice(0, 43), pesos = [2, 3, 4, 5, 6, 7, 8, 9], soma = 0, p = 0;
+        for (var i = ch43.length - 1; i >= 0; i--) {
+          soma += parseInt(ch43.charAt(i), 10) * pesos[p % 8];
+          p++;
+        }
+        var dv = 11 - (soma % 11);
+        if (dv >= 10) dv = 0;
+        return dv === parseInt(ch.charAt(43), 10);
+      }
+
+      // ---- Motor 1: BarcodeDetector nativo ----
+      // Tenta em resolução cheia e, se falhar, numa versão reduzida (ajuda em
+      // fotos gigantes onde o detector se perde).
+      async function tentarBarcodeDetector(bitmap, fileUrl) {
+        if (!('BarcodeDetector' in window)) return { ok: false, motivo: 'API indisponível' };
+        var suportados = [];
+        try { suportados = await window.BarcodeDetector.getSupportedFormats(); } catch (e) {}
+        var fmts = FORMATOS.filter(function (f) { return suportados.indexOf(f) >= 0; });
+        var detector = new window.BarcodeDetector(fmts.length ? { formats: fmts } : undefined);
+
+        // 1ª tentativa: bitmap em resolução cheia.
+        try {
+          var r1 = await detector.detect(bitmap);
+          if (r1 && r1.length) return { ok: true, valor: r1[0].rawValue, formato: r1[0].format, via: 'full-res' };
+        } catch (e) {}
+
+        // 2ª tentativa: reduz o maior lado para ~1600px num canvas.
+        try {
+          var canvas = reduzir(bitmap, 1600);
+          var r2 = await detector.detect(canvas);
+          if (r2 && r2.length) return { ok: true, valor: r2[0].rawValue, formato: r2[0].format, via: 'reduzido 1600' };
+        } catch (e) {}
+
+        return { ok: false, motivo: 'não detectou' };
+      }
+
+      function reduzir(bitmap, maxLado) {
+        var w = bitmap.width, h = bitmap.height;
+        var escala = Math.min(1, maxLado / Math.max(w, h));
+        var cw = Math.round(w * escala), ch = Math.round(h * escala);
+        var canvas = document.createElement('canvas');
+        canvas.width = cw; canvas.height = ch;
+        canvas.getContext('2d').drawImage(bitmap, 0, 0, cw, ch);
+        return canvas;
+      }
+
+      // ---- Motor 2: ZXing ----
+      async function tentarZXing(fileUrl) {
+        if (!window.ZXing) return { ok: false, motivo: 'ZXing não carregou' };
+        try {
+          var hints = new Map();
+          hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+          hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+            ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.CODE_128,
+            ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+            ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E, ZXing.BarcodeFormat.ITF,
+          ]);
+          var reader = new ZXing.BrowserMultiFormatReader(hints);
+          var res = await reader.decodeFromImageUrl(fileUrl);
+          return { ok: true, valor: res.getText(), formato: String(res.getBarcodeFormat()) };
+        } catch (e) {
+          return { ok: false, motivo: (e && e.name) ? e.name : 'não detectou' };
+        }
+      }
+
+      function linhaMotor(nome, res, ms) {
+        var status = res.ok
+          ? '<span class="pill ok">leu</span>'
+          : '<span class="pill err">falhou</span>';
+        var detalhe = res.ok
+          ? '<code>' + escapar(res.valor) + '</code><br><span class="muted">formato: ' + escapar(String(res.formato)) + (res.via ? ' · ' + res.via : '') + ' · ' + ms + ' ms</span>'
+          : '<span class="muted">' + escapar(res.motivo || '') + ' · ' + ms + ' ms</span>';
+        return '<tr><th>' + nome + '</th><td>' + status + '<br>' + detalhe + '</td></tr>';
+      }
+
+      function escapar(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+      }
+
+      async function processar(file) {
+        if (!file) return;
+        var url = URL.createObjectURL(file);
+        el('foto').src = url;
+        el('foto').style.display = 'block';
+        setStatus('Decodificando com os dois motores…', 'muted');
+        el('resultCard').style.display = 'none';
+
+        var bitmap = null;
+        try { bitmap = await createImageBitmap(file); } catch (e) {}
+
+        var t0 = performance.now();
+        var bd = bitmap ? await tentarBarcodeDetector(bitmap, url) : { ok: false, motivo: 'sem ImageBitmap' };
+        var t1 = performance.now();
+        var zx = await tentarZXing(url);
+        var t2 = performance.now();
+
+        var rows = '';
+        rows += linhaMotor('BarcodeDetector', bd, Math.round(t1 - t0));
+        rows += linhaMotor('ZXing', zx, Math.round(t2 - t1));
+        el('engineRows').innerHTML = rows;
+
+        // Chave NFe: usa o valor de qualquer motor que tenha lido.
+        var valorLido = bd.ok ? bd.valor : (zx.ok ? zx.valor : null);
+        var chaveOk = false;
+        var chaveHtml = '';
+        if (valorLido) {
+          var ch = extrairChave(valorLido);
+          if (ch) {
+            chaveOk = chaveValida(ch);
+            var modelo = ch.slice(20, 22);
+            var tipo = modelo === '55' ? 'NFe (modelo 55)' : modelo === '65' ? 'NFC-e (modelo 65)' : 'modelo ' + modelo;
+            chaveHtml = '<div class="' + (chaveOk ? 'ok' : 'err') + '">'
+              + (chaveOk ? '✅ Chave válida — ' : '⚠️ Chave com dígito inválido — ')
+              + escapar(tipo) + '</div><code>' + escapar(ch) + '</code>';
+          } else {
+            chaveHtml = '<div class="warn">Leu um código, mas não é uma chave NFe de 44 dígitos.</div>';
+          }
+        } else {
+          chaveHtml = '<div class="err">Nenhum motor conseguiu ler o código.</div>';
+        }
+        el('chaveInfo').innerHTML = chaveHtml;
+        el('resultCard').style.display = 'block';
+
+        // Placar.
+        placar.total++;
+        if (bd.ok) placar.bd++;
+        if (zx.ok) placar.zx++;
+        if (bd.ok || zx.ok) placar.any++;
+        if (chaveOk) placar.chave++;
+        renderPlacar();
+
+        var resumo = (bd.ok || zx.ok)
+          ? '<span class="ok">Leu!</span> ' + (bd.ok && zx.ok ? '(ambos)' : bd.ok ? '(só BarcodeDetector)' : '(só ZXing)')
+          : '<span class="err">Nenhum motor leu esta foto.</span>';
+        setStatus(resumo + ' Teste a próxima foto.', bd.ok || zx.ok ? 'ok' : 'err');
+
+        setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+      }
+
+      function renderPlacar() {
+        el('sTotal').textContent = placar.total;
+        el('sBD').textContent = placar.bd;
+        el('sZX').textContent = placar.zx;
+        el('sAny').textContent = placar.any;
+        el('sChave').textContent = placar.chave;
+        var taxa = placar.total ? Math.round((placar.any / placar.total) * 100) : 0;
+        el('scoreLine').textContent = taxa + '% de acerto (' + placar.any + '/' + placar.total + ')';
+        el('scoreLine').className = 'big ' + (taxa >= 80 ? 'ok' : taxa >= 40 ? 'warn' : 'err');
+      }
+      function resetPlacar() {
+        placar = { total: 0, bd: 0, zx: 0, any: 0, chave: 0 };
+        renderPlacar();
+        el('scoreLine').textContent = '—';
+        el('scoreLine').className = 'big';
+      }
+
+      el('fInput').addEventListener('change', function (e) { processar(e.target.files && e.target.files[0]); });
+      el('fInputGaleria').addEventListener('change', function (e) { processar(e.target.files && e.target.files[0]); });
+
+      // ---- Diagnóstico ----
+      (async function () {
+        var temBD = 'BarcodeDetector' in window;
+        var fmts = [];
+        if (temBD) { try { fmts = await window.BarcodeDetector.getSupportedFormats(); } catch (e) {} }
+        var linhas = [
+          'Contexto seguro (HTTPS): ' + (window.isSecureContext ? 'SIM' : 'NÃO'),
+          'BarcodeDetector nativo: ' + (temBD ? 'SIM' : 'NÃO (só ZXing)'),
+          'Formatos suportados (BarcodeDetector): ' + (fmts.length ? fmts.join(', ') : '—'),
+          'ZXing carregado: ' + (window.ZXing ? 'SIM' : 'NÃO'),
+          'Dispositivo: ' + (/Mobi|Android|iPhone/i.test(navigator.userAgent) ? 'celular' : 'desktop'),
+          'createImageBitmap: ' + (typeof createImageBitmap === 'function' ? 'SIM' : 'NÃO'),
+        ];
+        el('diag').innerHTML = linhas.map(function (l) { return '<li>' + l + '</li>'; }).join('');
+      })();
+
+      renderPlacar();
+    </script>
+  </body>
+</html>
